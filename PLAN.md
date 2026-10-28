@@ -21,8 +21,54 @@ compressed glTF model), never a smaller or plainer experience.
 | R-D1 | **Full scroll film, rebuilt clean, expanded**   | Keep the concept: a multi-act, scroll-driven product film including a teardown, with **more** showcase than the original (at least its 11 beats plus new ones), more device detail and more polished animation. New code from scratch on a much simpler engine. Do not port the old `src/film/**` or `src/components/PhoneViewer/**`. |
 | R-D2 | **Phone model: Blender -> glTF**                | Model a clean, original, fictional phone in Blender (the `blender` MCP is connected; Steam Blender 5.x). Export one compressed `.glb`, loaded with three's `GLTFLoader`.                                                                                                                                                              |
 | R-D3 | **Fresh visual direction**                      | Do not reuse the PR #1 porcelain/Geist system by default. Explore directions first and let the owner pick (stage R1).                                                                                                                                                                                                                 |
-| R-D4 | **Loading page: the phone is the progress bar** | Requested 2026-10-28. See "Loader" below.                                                                                                                                                                                                                                                                                             |
+| R-D4 | **Loading page: the phone is the progress bar** | Requested 2026-10-28. Shipped on the stopgap (`src/film/FilmLoader.tsx`); the rebuild carries it over with glTF byte progress. See "Loader" below.                                                                                                                                                                                    |
 | R-D5 | Merge PR #1 as stopgap                          | Done. Live site has the redesign + fixes until the rebuild ships.                                                                                                                                                                                                                                                                     |
+
+## Acceptance criteria from owner feedback (2026-10-28, on the live stopgap)
+
+The owner's verdict on the stopgap: overall polish is good, but parts were
+"done very lazily" and it was "made in mind of just getting results instead of
+making something special and sleek". Every item below is a hard gate for R4 to
+R6; a stage is not done while any is unmet.
+
+1. **Pacing with room to breathe.** Every beat has a dwell plateau: a span of
+   scroll (at least 40vh on desktop, 30vh on mobile) where the shot holds and
+   the copy is fully readable, so an accidental overscroll never skips or
+   half-plays a beat. Transitions get their own eased span; no beat totals less
+   than about 1.5 viewport heights. Wheel and trackpad scrolling settle softly
+   onto beat holds (proximity snapping or a gentle settle after input stops),
+   never fighting the user.
+2. **Automated showcase segments.** The owner explicitly wants "automated
+   scrolling / blocking user scroll on some parts". Selected moments (teardown
+   tour, per-component spotlights, a hero turntable) play themselves and may
+   hold the page while they run: visible progress, a pause/skip control, and
+   any wheel, touch, key or Escape releases control. Never under reduced
+   motion; keyboard users can always move on.
+3. **A detailed exploded view with an individual showcase per component.**
+   Every component is modelled in detail (no boxes): battery cells and the
+   connector, the logic board with packages, shield cans and connectors, the
+   SoC package and die, vapour chamber and graphite, the charging coil,
+   speakers, the haptic motor, each camera with its lens stack, sensor and OIS,
+   flex cables, screws, SIM tray and buttons. Each one gets a spotlight beat:
+   it lifts out of the stack, turns to a hero angle under a close camera,
+   shows labelled callouts, plays a micro-animation of what it does (coil
+   current pulsing, haptic shiver, OIS shift, lens elements separating, cells
+   filling), then returns. The full exploded overview labels every part, and
+   hovering or tapping a part identifies it.
+4. **Text written and set like a flagship launch.** A real copywriting pass
+   (specific and evocative, never generic), and varied layouts per beat: big
+   scroll-driven numerals, split statements, kinetic headlines, spec tables on
+   glass, side notes. Not one kicker/headline/body template repeated.
+   Typography moves with the film: masked line reveals, numerals rolling with
+   scroll, scrubbed text where it helps.
+5. **Loader (shipped on the stopgap, carry the lessons).** Building the scene
+   blocks the main thread for seconds on a cold load, so the bar must animate
+   on the compositor (transform-only Web Animations), and visible text must
+   never contradict the bar. In the rebuild, real byte progress comes from the
+   glTF load.
+6. **Special, not done.** Each stage ends with a design review against
+   reference-quality product sites and this list, plus a frame-by-frame visual
+   pass on desktop and 390 px. Nothing ships that a reviewer would call lazy.
 
 ## Keep (these are not "the broken original"; they are project rules or fresh infra)
 
