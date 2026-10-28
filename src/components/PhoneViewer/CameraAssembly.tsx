@@ -1,12 +1,11 @@
-import { useMemo, type MutableRefObject } from 'react'
+import { useEffect, useMemo, type MutableRefObject } from 'react'
 import * as THREE from 'three'
 import {
   CERAMIC_FACE_Z,
   COLLAR,
   FLASH_ARC,
   GLASS_SEAL,
-  LENSES,
-  LENS_RING_R,
+  LENS_COLLAR,
   MEDALLION,
   MODULE,
   MODULE_MIC,
@@ -14,57 +13,35 @@ import {
   PERISCOPE,
   TOF,
 } from './phoneDimensions.ts'
-import { createModuleBaseGeometry, createRoundedRectGeometry } from './phoneGeometry.ts'
+import {
+  createModuleBaseGeometry,
+  createRearLatheGeometry,
+  createRoundedRectGeometry,
+  createRoundedRectRingGeometry,
+} from './phoneGeometry.ts'
 import type { PhoneMaterialSet } from './phoneMaterials.ts'
 import type { FocusLensId } from './PhoneConfig.tsx'
+import {
+  createModuleGlassGeometry,
+  lensElementCap,
+  lensSpecs,
+  lensTurretProfile,
+  LENS_TUNNEL,
+  moduleCenter,
+  MODULE_RISE,
+  periscopeLayout,
+  riseZ,
+  type LensSpec,
+} from './cameraLayout.ts'
 
 export interface OpticsControl {
   optics: number
   visible: boolean
 }
 
-export interface LensSpec {
-  key: FocusLensId
-  x: number
-  y: number
-  r: number
-  coatHue: number
-  barrelDepth: number
-  glass: keyof Pick<PhoneMaterialSet, 'lensGlassA' | 'lensGlassB' | 'lensGlassC'>
-}
-
-const GLASS_FOR: Record<'main' | 'ultra' | 'mid', LensSpec['glass']> = {
-  main: 'lensGlassA',
-  ultra: 'lensGlassB',
-  mid: 'lensGlassC',
-}
-
-/** Module center in phone meters. The module is centered, not offset. */
-export function moduleCenter(): { x: number; y: number } {
-  return { x: MODULE.cx, y: MODULE.cy }
-}
-
-/** Polar seat of a round lens in phone meters. */
-export function lensSeat(angleDeg: number): { x: number; y: number } {
-  const a = (angleDeg * Math.PI) / 180
-  const c = moduleCenter()
-  return { x: c.x + LENS_RING_R * Math.cos(a), y: c.y + LENS_RING_R * Math.sin(a) }
-}
-
-/** Round lens seats in phone meters, derived from LENSES polar placement. */
-export function lensSpecs(): LensSpec[] {
-  return LENSES.map((lens) => {
-    const seat = lensSeat(lens.angleDeg)
-    return {
-      key: lens.key,
-      x: seat.x,
-      y: seat.y,
-      r: lens.r,
-      coatHue: lens.coatHue,
-      barrelDepth: lens.barrelDepth,
-      glass: GLASS_FOR[lens.key],
-    }
-  })
+/** Disposes owned geometries when their owner unmounts or rebuilds. */
+function useDisposeGeometries(geometries: ReadonlyArray<THREE.BufferGeometry>): void {
+  useEffect(() => () => geometries.forEach((g) => g.dispose()), [geometries])
 }
 
 interface CameraAssemblyProps {
@@ -81,16 +58,17 @@ interface CameraAssemblyProps {
 
 /**
  * Circular camera module (Prompt A2). Centered machined assembly: lathe base
- * with a G1 fillet, two collar steps (polished outer carrying arc text,
- * bead-blasted step), seal groove, cover glass with micro-text, three round
- * lens assemblies on a triangle, rectangular periscope, arc flash, ToF pair,
- * module mic, and an inlaid iris medallion. Rear faces -z.
+ * fillet, knurled outer collar, polished collar top carrying arc text,
+ * riser, bead-blasted step, bore, seal, cover glass with micro-text, three
+ * round lens turrets on a triangle, rectangular periscope, arc flash, ToF
+ * pair, module mic, and an inlaid iris medallion. Rear faces -z, so every
+ * flat face is turned to face -z (a default ring or circle faces +z, into
+ * the phone, and is back-face culled from behind).
  *
- * Layering note: the cover glass is semi-transparent so the medallion,
- * barrels, and baffles read through it dimmed, exactly like glass over
- * hardware. The ToF window, flash diffuser, mic, and periscope window are
- * separate sapphire windows sitting just proud of the glass, as on real
- * modules, which keeps each legible instead of stacked dimming.
+ * Layering note: the cover glass is semi-transparent so the medallion and
+ * the bore read through it dimmed, exactly like glass over hardware. The
+ * ToF window, flash diffuser, mic, and periscope window are separate
+ * windows sitting just proud of the glass, as on real modules.
  */
 export function CameraAssembly({
   materials,
@@ -106,21 +84,44 @@ export function CameraAssembly({
       if (map !== undefined) map.current[name] = g
     }
   }, [separation])
-  const baseGeometry = useMemo(() => {
-    const geo = createModuleBaseGeometry(MODULE.outerR, MODULE.proud, MODULE.baseFillet)
-    geo.rotateX(-Math.PI / 2)
-    geo.translate(center.x, center.y, CERAMIC_FACE_Z)
-    return geo
+  const shell = useMemo(() => {
+    const place = (geo: THREE.BufferGeometry): THREE.BufferGeometry =>
+      geo.translate(center.x, center.y, CERAMIC_FACE_Z)
+    const base = createModuleBaseGeometry(MODULE.outerR, MODULE.baseFillet)
+    base.rotateX(-Math.PI / 2)
+    // Riser: the outer collar's inner wall, down to the step. Bore: the
+    // step's inner wall, down past the glass to the ceramic face. Both
+    // face the axis (seen from inside the bowl).
+    const riser = createRearLatheGeometry([
+      [COLLAR.outer.rIn, MODULE_RISE.outer],
+      [COLLAR.outer.rIn, MODULE_RISE.step],
+    ])
+    const bore = createRearLatheGeometry([
+      [COLLAR.step.rIn, MODULE_RISE.step],
+      [COLLAR.step.rIn, 0],
+    ])
+    return {
+      base: place(base),
+      riser: place(riser),
+      bore: place(bore),
+      glass: createModuleGlassGeometry(),
+    }
   }, [center])
+  const tofWindowGeometry = useMemo(
+    () => createRoundedRectGeometry(TOF.window.w, TOF.window.h, TOF.window.r, 0.0002),
+    [],
+  )
+  const owned = useMemo(
+    () => [shell.base, shell.riser, shell.bore, shell.glass, tofWindowGeometry],
+    [shell, tofWindowGeometry],
+  )
+  useDisposeGeometries(owned)
   const knurl = useMemo(() => {
-    // One instanced wedge per tooth around the outer collar wall. Teeth
-    // break the silhouette at macro (knurlDepth 0.18mm proud of the wall).
+    // One instanced wedge per tooth around the outer collar wall, above
+    // the base fillet. Teeth break the silhouette at macro (0.18mm proud).
     const total = COLLAR.outer.knurlTeeth
-    const geo = new THREE.BoxGeometry(
-      COLLAR.outer.knurlDepth * 1.5,
-      0.00022,
-      COLLAR.outer.rise * 0.8,
-    )
+    const wall = COLLAR.outer.rise - MODULE.baseFillet
+    const geo = new THREE.BoxGeometry(COLLAR.outer.knurlDepth * 1.5, 0.00022, wall * 0.9)
     const mesh = new THREE.InstancedMesh(geo, materials.collarOuter, total)
     const m = new THREE.Matrix4()
     const e = new THREE.Euler()
@@ -128,7 +129,7 @@ export function CameraAssembly({
     const v = new THREE.Vector3()
     const sc = new THREE.Vector3(1, 1, 1)
     const r = COLLAR.outer.rOut + COLLAR.outer.knurlDepth * 0.2
-    const z = CERAMIC_FACE_Z - COLLAR.outer.rise / 2
+    const z = riseZ((MODULE.baseFillet + COLLAR.outer.rise) / 2)
     for (let k = 0; k < total; k++) {
       const a = (k / total) * Math.PI * 2
       e.set(0, 0, a)
@@ -140,75 +141,69 @@ export function CameraAssembly({
     mesh.instanceMatrix.needsUpdate = true
     return mesh
   }, [materials, center])
+  useEffect(() => () => knurl.geometry.dispose(), [knurl])
   const medallion = useMemo(
     () => buildMedallionGeometry(materials.medallion, materials.medallionRing),
     [materials],
   )
-  const tofWindowGeometry = useMemo(
-    () => createRoundedRectGeometry(TOF.window.w, TOF.window.h, TOF.window.r, 0.0002),
-    [],
+  useEffect(
+    () => () =>
+      medallion.traverse((child) => {
+        if (child instanceof THREE.Mesh) child.geometry.dispose()
+      }),
+    [medallion],
   )
 
-  const zOuter = CERAMIC_FACE_Z - COLLAR.outer.rise
-  const zStep = CERAMIC_FACE_Z - COLLAR.step.rise
-  const zGlass = CERAMIC_FACE_Z - COLLAR.glass.rise
+  const zOuter = riseZ(MODULE_RISE.outer)
+  const zStep = riseZ(MODULE_RISE.step)
+  const zGlass = riseZ(MODULE_RISE.glass)
   const tofAngle = (TOF.angleDeg * Math.PI) / 180
   const tofX = center.x + TOF.ringR * Math.cos(tofAngle)
   const tofY = center.y + TOF.ringR * Math.sin(tofAngle)
   const micAngle = (MODULE_MIC.angleDeg * Math.PI) / 180
   const micX = center.x + MODULE_MIC.ringR * Math.cos(micAngle)
   const micY = center.y + MODULE_MIC.ringR * Math.sin(micAngle)
+  const flashStart = (FLASH_ARC.startDeg * Math.PI) / 180
+  const flashSweep = (FLASH_ARC.sweepDeg * Math.PI) / 180
+  const wallRise = COLLAR.outer.rise - MODULE.baseFillet
 
   return (
     <group>
-      {/* Module base with machined fillet into the rear panel */}
-      <mesh geometry={baseGeometry} castShadow>
+      {/* Base fillet blending the collar into the rear panel */}
+      <mesh geometry={shell.base} castShadow>
         <primitive object={materials.island} attach="material" />
       </mesh>
-      {/* Outer collar wall: instanced knurl at LOD0, mapped wall below */}
+      {/* Outer collar wall above the fillet: instanced knurl at LOD0, mapped wall below */}
       <mesh
-        position={[center.x, center.y, CERAMIC_FACE_Z - COLLAR.outer.rise / 2]}
+        position={[center.x, center.y, riseZ((MODULE.baseFillet + COLLAR.outer.rise) / 2)]}
         rotation={[Math.PI / 2, 0, 0]}
       >
-        <cylinderGeometry
-          args={[COLLAR.outer.rOut, COLLAR.outer.rOut, COLLAR.outer.rise, 96, 1, true]}
-        />
+        <cylinderGeometry args={[COLLAR.outer.rOut, COLLAR.outer.rOut, wallRise, 96, 1, true]} />
         <primitive
           object={detail === 'high' ? materials.collarOuter : materials.knurlWall}
           attach="material"
         />
       </mesh>
       {/* Outer collar top face: polished, carries the partner arc text */}
-      <mesh position={[center.x, center.y, zOuter]}>
+      <mesh position={[center.x, center.y, zOuter]} rotation={[0, Math.PI, 0]}>
         <ringGeometry args={[COLLAR.outer.rIn, COLLAR.outer.rOut, 96]} />
         <primitive object={materials.collarTop} attach="material" />
       </mesh>
-      {/* Step ring wall + matte bead-blasted top */}
-      <mesh
-        position={[center.x, center.y, zOuter - (COLLAR.outer.rise - COLLAR.step.rise) / 2]}
-        rotation={[Math.PI / 2, 0, 0]}
-      >
-        <cylinderGeometry
-          args={[
-            COLLAR.step.rOut,
-            COLLAR.step.rOut,
-            COLLAR.outer.rise - COLLAR.step.rise,
-            96,
-            1,
-            true,
-          ]}
-        />
+      {/* Riser down to the matte bead-blasted step, then the bore */}
+      <mesh geometry={shell.riser}>
         <primitive object={materials.collarStep} attach="material" />
       </mesh>
-      <mesh position={[center.x, center.y, zStep]}>
+      <mesh position={[center.x, center.y, zStep]} rotation={[0, Math.PI, 0]}>
         <ringGeometry args={[COLLAR.step.rIn, COLLAR.step.rOut, 96]} />
         <primitive object={materials.collarStep} attach="material" />
       </mesh>
-      {/* Seal groove: crisp dark hairline between glass and metal */}
-      <mesh
-        position={[center.x, center.y, zGlass - GLASS_SEAL.depth / 2]}
-        rotation={[Math.PI / 2, 0, 0]}
-      >
+      <mesh geometry={shell.bore}>
+        <primitive object={materials.collarStep} attach="material" />
+      </mesh>
+      {/* Seal groove: dark gasket bead seated on the glass edge, in the
+          module plane (a torus lies in XY by default; the old PI/2 turn
+          stood it on edge as a 38mm hoop through the whole phone). */}
+      <mesh position={[center.x, center.y, zGlass - GLASS_SEAL.depth / 2]}>
         <torusGeometry
           args={[
             (GLASS_SEAL.rOut + GLASS_SEAL.rIn) / 2,
@@ -221,8 +216,11 @@ export function CameraAssembly({
       </mesh>
       {/* Cover glass: semi-transparent so hardware reads through it dimmed */}
       <group ref={sep('module:cover')}>
-        <mesh position={[center.x, center.y, zGlass]} rotation={[0, Math.PI, 0]}>
-          <circleGeometry args={[COLLAR.glass.r, 96]} />
+        <mesh
+          geometry={shell.glass}
+          position={[center.x, center.y, zGlass]}
+          rotation={[0, Math.PI, 0]}
+        >
           <primitive object={materials.moduleGlass} attach="material" />
         </mesh>
       </group>
@@ -231,7 +229,7 @@ export function CameraAssembly({
         <LensAssembly
           key={spec.key}
           spec={spec}
-          faceZ={CERAMIC_FACE_Z - MODULE.proud}
+          zGlass={zGlass}
           materials={materials}
           lensRefs={lensRefs}
           detail={detail}
@@ -240,29 +238,34 @@ export function CameraAssembly({
       ))}
       <PeriscopeAssembly
         center={center}
+        zGlass={zGlass}
         materials={materials}
         lensRefs={lensRefs}
-        detail={detail}
         sep={sep}
       />
       {/* Arc flash: frosted diffuser arc bedded on the step ring with two
-          LED dies proud of it. Dies sit 0.04mm off the diffuser plane
-          (never coplanar); the ring softens their edge. */}
-      <group
-        position={[center.x, center.y, zStep - 0.00008]}
-        rotation={[0, 0, (FLASH_ARC.startDeg * Math.PI) / 180]}
-      >
+          LED dies proud of it, all facing the rear. The arc is authored
+          mirrored (PI - angle) because the PI turn about Y mirrors x. */}
+      <group position={[center.x, center.y, zStep - 0.00008]} rotation={[0, Math.PI, 0]}>
         <mesh>
           <ringGeometry
-            args={[FLASH_ARC.rIn, FLASH_ARC.rOut, 24, 1, 0, (FLASH_ARC.sweepDeg * Math.PI) / 180]}
+            args={[
+              FLASH_ARC.rIn,
+              FLASH_ARC.rOut,
+              24,
+              1,
+              Math.PI - flashStart - flashSweep,
+              flashSweep,
+            ]}
           />
           <primitive object={materials.flashDiffuser} attach="material" />
         </mesh>
         {[0.3, 0.7].map((t) => {
-          const a = t * ((FLASH_ARC.sweepDeg * Math.PI) / 180)
+          const a = Math.PI - (flashStart + t * flashSweep)
           const r = (FLASH_ARC.rIn + FLASH_ARC.rOut) / 2
+          // Dies 0.04mm proud of the diffuser (+z here is rear after the turn).
           return (
-            <mesh key={t} position={[Math.cos(a) * r, Math.sin(a) * r, -0.00004]}>
+            <mesh key={t} position={[Math.cos(a) * r, Math.sin(a) * r, 0.00004]}>
               <circleGeometry args={[0.0009, 16]} />
               <primitive object={materials.flashArc} attach="material" />
             </mesh>
@@ -276,12 +279,12 @@ export function CameraAssembly({
         </mesh>
         {detail === 'high' ? <ToFInternals materials={materials} angle={tofAngle} /> : null}
       </group>
-      {/* Module mic: 0.7mm, felt not seen */}
-      <mesh position={[micX, micY, zGlass - 0.0002]}>
+      {/* Module mic: 0.7mm port, axis on z, top face 0.02mm proud of the glass */}
+      <mesh position={[micX, micY, zGlass + 0.00013]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[MODULE_MIC.d / 2, MODULE_MIC.d / 2, 0.0003, 12]} />
         <primitive object={materials.moduleMic} attach="material" />
       </mesh>
-      {/* Iris medallion inlaid under the glass at the triangle centre */}
+      {/* Iris medallion inlaid 0.12mm under the glass at the triangle centre */}
       <group position={[center.x, center.y, zGlass + MEDALLION.z]}>
         <primitive object={medallion} />
       </group>
@@ -293,8 +296,10 @@ export function CameraAssembly({
  * Six-blade iris medallion (Prompt A2 section 4.3, path A): six identical
  * straight-edged quadrilateral blades at 60 degrees with a fixed overlap
  * offset, so a hexagonal opening stays open at the centre. Real geometry:
- * crisp at 8cm, no texel grid. Brushing comes from the roughness map on the
- * shared medallion materials, which also dissolve with the shell.
+ * crisp at 8cm, no texel grid. Blades extrude inboard (+z) from the group
+ * plane; the hairline ring faces the rear just proud of the blade faces.
+ * Brushing comes from the roughness map on the shared medallion materials,
+ * which also dissolve with the shell.
  */
 export function buildMedallionGeometry(
   bladeMaterial: THREE.Material,
@@ -319,7 +324,10 @@ export function buildMedallionGeometry(
     })
     group.add(new THREE.Mesh(geo, bladeMaterial))
   }
-  group.add(new THREE.Mesh(new THREE.RingGeometry(R - MEDALLION.ringWidth, R, 72), ringMaterial))
+  const ring = new THREE.Mesh(new THREE.RingGeometry(R - MEDALLION.ringWidth, R, 72), ringMaterial)
+  ring.rotation.y = Math.PI
+  ring.position.z = -0.000005
+  group.add(ring)
   return group
 }
 
@@ -333,18 +341,18 @@ function ToFInternals({ materials, angle }: { materials: PhoneMaterialSet; angle
   const ry = Math.sin(angle + (r.offsetDeg * Math.PI) / 180) * 0.0018
   return (
     <group>
-      {/* Apertures sit behind the window's rear face (never coplanar with
-          it) and read through the filter dimly: barely perceptible. */}
-      <mesh position={[ex, ey, 0.00016]}>
+      {/* Apertures sit behind the window's inner face (never coplanar with
+          it), face the rear, and read through the filter dimly. */}
+      <mesh position={[ex, ey, 0.00016]} rotation={[0, Math.PI, 0]}>
         <circleGeometry args={[e.d / 2, 20]} />
         <primitive object={materials.tofEmitter} attach="material" />
       </mesh>
-      <mesh position={[rx, ry, 0.00016]}>
+      <mesh position={[rx, ry, 0.00016]} rotation={[0, Math.PI, 0]}>
         <circleGeometry args={[r.d / 2, 20]} />
         <primitive object={materials.tofReceiver} attach="material" />
       </mesh>
       {/* Square sensor edge inside the receiver */}
-      <mesh position={[rx, ry, 0.00018]}>
+      <mesh position={[rx, ry, 0.00014]} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[r.d * 0.55, r.d * 0.55]} />
         <primitive object={materials.tofHousing} attach="material" />
       </mesh>
@@ -354,169 +362,207 @@ function ToFInternals({ materials, angle }: { materials: PhoneMaterialSet; angle
 
 /**
  * Folded periscope optic (Prompt A2 section 2.5): rounded-rectangle window
- * proud of the cover glass, angled prism floor catching one fast highlight,
- * dark ramped interior. Registers the fourth focusable lens id.
+ * proud of the cover glass over an open-wall cavity that runs down to the
+ * ceramic face, with an angled prism face catching one fast highlight.
+ * Registers the fourth focusable lens id. The group origin sits on the
+ * cover glass plane so focus scaling grows the optic off the glass instead
+ * of lifting it.
  */
 function PeriscopeAssembly({
   center,
+  zGlass,
   materials,
   lensRefs,
-  detail,
   sep,
 }: {
   center: { x: number; y: number }
+  zGlass: number
   materials: PhoneMaterialSet
   lensRefs: MutableRefObject<Partial<Record<FocusLensId, THREE.Group>>>
-  detail: 'high' | 'low'
   sep: (name: string) => (g: THREE.Group | null) => void
 }) {
+  const layout = useMemo(() => periscopeLayout(), [])
+  const focusGeometry = useMemo(
+    () =>
+      createRoundedRectRingGeometry(
+        PERISCOPE.w + 0.0008,
+        PERISCOPE.h + 0.0008,
+        PERISCOPE.r + 0.0004,
+        PERISCOPE.w + 0.0002,
+        PERISCOPE.h + 0.0002,
+        PERISCOPE.r + 0.0001,
+        0.00001,
+      ),
+    [],
+  )
+  useEffect(() => () => focusGeometry.dispose(), [focusGeometry])
   const x = center.x + PERISCOPE.x
   const y = center.y + PERISCOPE.y
-  const zFace = CERAMIC_FACE_Z - MODULE.proud
-  const zGlass = CERAMIC_FACE_Z - COLLAR.glass.rise
-  const zWindow = zGlass - 0.00015
-  const zFloor = zGlass + PERISCOPE.cavityDepth
+  // Local z relative to the glass plane: rear (outward) is negative.
+  const local = (rise: number): number => riseZ(rise) - zGlass
+  const wallTop = layout.wallTopRise
+  const wallMid = local(wallTop / 2)
+  const t = PERISCOPE.wall
   return (
     <group
-      position={[x, y, 0]}
+      position={[x, y, zGlass]}
       ref={(group: THREE.Group | null) => {
         if (group !== null) lensRefs.current.periscope = group
       }}
     >
       <group ref={sep('periscope:cover')}>
-        {/* Cavity walls: an open frame, never a solid box (a solid bricks
-            over the prism). The window covers the top, the prism closes the
-            bottom; looking in reads folded optics. */}
+        {/* Cavity walls: an open frame centered on the window edge, from
+            the window down to the ceramic face, never a solid box. */}
         {[
-          { x: 0, y: PERISCOPE.h / 2, w: PERISCOPE.w, h: 0.0004 },
-          { x: 0, y: -PERISCOPE.h / 2, w: PERISCOPE.w, h: 0.0004 },
-          { x: -PERISCOPE.w / 2, y: 0, w: 0.0004, h: PERISCOPE.h },
-          { x: PERISCOPE.w / 2, y: 0, w: 0.0004, h: PERISCOPE.h },
-        ].map(({ x, y, w, h }) => (
-          <mesh key={`${x},${y}`} position={[x, y, (zWindow + zFloor) / 2]}>
-            <boxGeometry args={[w, h, PERISCOPE.cavityDepth + 0.0002]} />
+          { x: 0, y: PERISCOPE.h / 2, w: PERISCOPE.w + t, h: t },
+          { x: 0, y: -PERISCOPE.h / 2, w: PERISCOPE.w + t, h: t },
+          { x: -PERISCOPE.w / 2, y: 0, w: t, h: PERISCOPE.h - t },
+          { x: PERISCOPE.w / 2, y: 0, w: t, h: PERISCOPE.h - t },
+        ].map(({ x: wx, y: wy, w, h }) => (
+          <mesh key={`${wx},${wy}`} position={[wx, wy, wallMid]}>
+            <boxGeometry args={[w, h, wallTop]} />
             <primitive object={materials.lensCavity} attach="material" />
           </mesh>
         ))}
         {/* Cover window, a separate sapphire pane above the module glass */}
-        <mesh position={[0, 0, zWindow]}>
-          <boxGeometry args={[PERISCOPE.w, PERISCOPE.h, 0.00015]} />
+        <mesh position={[0, 0, local(layout.windowRise)]}>
+          <boxGeometry args={[PERISCOPE.w, PERISCOPE.h, layout.windowDepth]} />
           <primitive object={materials.periscopeGlass} attach="material" />
         </mesh>
       </group>
       <group ref={sep('periscope:prism')}>
-        {/* Prism floor tilted 40 degrees off the rear axis: no straight-down
-            view, one fast hard highlight as the camera arcs. */}
+        {/* Prism face tilted off the rear axis across the cavity: no
+            straight-down view, one fast hard highlight as the camera arcs. */}
         <mesh
-          position={[0, 0, zFloor]}
-          rotation={[Math.PI - (PERISCOPE.prismAngleDeg * Math.PI) / 180, 0, 0]}
+          position={[0, 0, local(layout.prism.rise)]}
+          rotation={[Math.PI - layout.prism.tilt, 0, 0]}
         >
-          <planeGeometry args={[PERISCOPE.w * 0.9, PERISCOPE.h * 1.6]} />
+          <planeGeometry args={[layout.prism.width, layout.prism.length]} />
           <primitive object={materials.periscopePrism} attach="material" />
         </mesh>
-        {detail === 'high' ? (
-          <mesh position={[0, 0, zFace]} name="focus-ring">
-            <ringGeometry args={[0.0072, 0.0078, 40]} />
-            <primitive object={materials.focusRing} attach="material" />
-          </mesh>
-        ) : null}
       </group>
+      {/* Focus ring seated on the glass around the window, facing the rear */}
+      <mesh
+        geometry={focusGeometry}
+        position={[0, 0, -0.00002]}
+        rotation={[0, Math.PI, 0]}
+        name="focus-ring"
+      >
+        <primitive object={materials.focusRing} attach="material" />
+      </mesh>
     </group>
   )
 }
 
 /**
- * One parametric optical assembly built outward from the module face (z0,
- * decreasing z is outward). Full-mouth sapphire cover, collar,
- * depth-ramped barrel, two baffles at 35/70 percent of barrel depth, front
- * element doming toward the viewer at 45% barrel depth, aperture hint,
- * sensor plane. Called three times, never modelled twice.
+ * One parametric optical turret on the cover glass (decreasing z is
+ * outward). Collar lathe from the glass to its top, sapphire cover dome in
+ * the mouth, inward-facing barrel with two baffles at 35/70 percent depth,
+ * front element doming toward the viewer at 45% depth, aperture hint,
+ * barrel floor, sensor plane. Called three times, never modelled twice.
+ * The group origin sits on the glass plane so focus scaling grows the
+ * turret off the glass instead of lifting it.
  */
 function LensAssembly({
   spec,
-  faceZ,
+  zGlass,
   materials,
   lensRefs,
   detail,
   sep,
 }: {
   spec: LensSpec
-  faceZ: number
+  zGlass: number
   materials: PhoneMaterialSet
   lensRefs: CameraAssemblyProps['lensRefs']
   detail: 'high' | 'low'
   sep: (name: string) => (g: THREE.Group | null) => void
 }) {
   const glass = materials[spec.glass]
-  const z0 = faceZ
-  const mouth = z0 + 0.0001
-  // Shallow sapphire cover spanning the full mouth (round 02 lens-flat
-  // fix): the old dome (base 0.18r) was a bump in an open well, so each
-  // mouth read as a hollow dark band instead of flat glass. Base radius
-  // exactly spec.r at the collar-top plane, gentle 0.12-rad bulge.
+  const profile = useMemo(() => lensTurretProfile(spec), [spec])
+  const geometries = useMemo(() => {
+    const rel = (pts: Array<[number, number]>): Array<[number, number]> =>
+      pts.map(([r, rise]) => [r, rise - MODULE_RISE.glass])
+    return {
+      collar: createRearLatheGeometry(rel(profile.collar), 40),
+      barrel: createRearLatheGeometry(rel(profile.barrel), 32),
+    }
+  }, [profile])
+  const owned = useMemo(() => [geometries.collar, geometries.barrel], [geometries])
+  useDisposeGeometries(owned)
+  const cap = useMemo(() => lensElementCap(spec), [spec])
+  const local = (rise: number): number => riseZ(rise) - zGlass
+  const mouthZ = local(MODULE_RISE.lensMouth)
+  // Shallow sapphire cover spanning the full mouth: base radius exactly
+  // spec.r on the inner collar wall, pole on the collar-top plane.
   const coverR = spec.r / Math.sin(0.12)
-  const coverBaseZ = z0 - 0.00035
+  const coverPoleZ = local(MODULE_RISE.lensTop)
+  const depthZ = (fraction: number): number => mouthZ + spec.barrelDepth * fraction
   return (
     <group
-      position={[spec.x, spec.y, 0]}
+      position={[spec.x, spec.y, zGlass]}
       ref={(group: THREE.Group | null) => {
         if (group !== null) lensRefs.current[spec.key] = group
       }}
     >
-      {/* Collar ring, proud 0.35mm */}
       <group ref={sep(`${spec.key}:collar`)}>
-        <mesh position={[0, 0, z0 - 0.00005]} castShadow>
-          <cylinderGeometry args={[spec.r + 0.0009, spec.r + 0.0012, 0.0006, 40]} />
+        <mesh geometry={geometries.collar} castShadow>
           <primitive object={materials.lensRing} attach="material" />
         </mesh>
       </group>
       {/* Cover dome spanning the collar mouth: highlight slides, never pops */}
       <group ref={sep(`${spec.key}:cover`)}>
-        <mesh position={[0, 0, coverBaseZ + coverR]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[0, 0, coverPoleZ + coverR]} rotation={[-Math.PI / 2, 0, 0]}>
           <sphereGeometry args={[coverR, 48, 8, 0, Math.PI * 2, 0, 0.12]} />
           <primitive object={glass} attach="material" />
         </mesh>
       </group>
       {/* Barrel wall plus baffles, descending into the module */}
       <group ref={sep(`${spec.key}:barrel`)}>
-        <mesh position={[0, 0, mouth + spec.barrelDepth / 2]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[spec.r * 0.86, spec.r * 0.8, spec.barrelDepth, 32, 1, true]} />
+        <mesh geometry={geometries.barrel}>
           <primitive object={materials.lensBarrel} attach="material" />
         </mesh>
         {/* Baffle rings at 35/70 percent of barrel depth (one on low LOD) */}
-        {(detail === 'high' ? [0.35, 0.7] : [0.5]).map((depth) => (
-          <mesh key={depth} position={[0, 0, mouth + spec.barrelDepth * depth]}>
-            <torusGeometry args={[spec.r * 0.78, 0.00022, 8, 32]} />
-            <primitive object={materials.lensBarrel} attach="material" />
-          </mesh>
-        ))}
+        {(detail === 'high' ? LENS_TUNNEL.baffleDepths : LENS_TUNNEL.baffleDepthLow).map(
+          (depth) => (
+            <mesh key={depth} position={[0, 0, depthZ(depth)]}>
+              <torusGeometry args={[spec.r * LENS_TUNNEL.baffleR, LENS_TUNNEL.baffleTube, 8, 32]} />
+              <primitive object={materials.lensBarrel} attach="material" />
+            </mesh>
+          ),
+        )}
       </group>
       {/* Front element at its per-lens depth: shallow cap doming toward
-          the viewer (round 02 lens-flat fix). The old cap domed inward and
-          sat behind the sensor plane, backface-culled and invisible, which
-          left every mouth a hollow well. Pole rides at 45% barrel depth. */}
+          the viewer, rim clear of the aperture and sensor below it. */}
       <group ref={sep(`${spec.key}:element`)}>
         <mesh
-          position={[0, 0, mouth + spec.barrelDepth * 0.45 + spec.r * 1.5]}
+          position={[0, 0, mouthZ + cap.poleDepth + cap.sphereR]}
           rotation={[-Math.PI / 2, 0, 0]}
         >
-          <sphereGeometry args={[spec.r * 1.5, 32, 8, 0, Math.PI * 2, 0, 0.5]} />
+          <sphereGeometry args={[cap.sphereR, 32, 8, 0, Math.PI * 2, 0, cap.theta]} />
           <primitive object={glass} attach="material" />
         </mesh>
       </group>
-      {/* Aperture hint plus sensor plane */}
+      {/* Aperture hint, barrel floor, and sensor plane, all facing the rear */}
       <group ref={sep(`${spec.key}:sensor`)}>
-        <mesh position={[0, 0, mouth + spec.barrelDepth * 0.8]} rotation={[0, Math.PI, 0]}>
+        <mesh position={[0, 0, depthZ(LENS_TUNNEL.aperture)]} rotation={[0, Math.PI, 0]}>
           <ringGeometry args={[spec.r * 0.3, spec.r * 0.42, 7]} />
           <primitive object={materials.lensCavity} attach="material" />
         </mesh>
-        <mesh position={[0, 0, mouth + spec.barrelDepth]} rotation={[0, Math.PI, 0]}>
+        <mesh position={[0, 0, depthZ(1)]} rotation={[0, Math.PI, 0]}>
+          <circleGeometry args={[spec.r * 0.86, 32]} />
+          <primitive object={materials.lensCavity} attach="material" />
+        </mesh>
+        <mesh position={[0, 0, depthZ(1) - 0.00002]} rotation={[0, Math.PI, 0]}>
           <circleGeometry args={[spec.r * 0.5, 24]} />
           <primitive object={materials.sensorGlint} attach="material" />
         </mesh>
       </group>
-      <mesh position={[0, 0, z0 - 0.00035]} rotation={[0, Math.PI, 0]} name="focus-ring">
-        <ringGeometry args={[spec.r + 0.0011, spec.r + 0.0017, 40]} />
+      {/* Focus ring seated on the glass around the turret base */}
+      <mesh position={[0, 0, -0.00002]} rotation={[0, Math.PI, 0]} name="focus-ring">
+        <ringGeometry
+          args={[spec.r + LENS_COLLAR.base + 0.00005, spec.r + LENS_COLLAR.base + 0.00055, 40]}
+        />
         <primitive object={materials.focusRing} attach="material" />
       </mesh>
     </group>

@@ -3,7 +3,6 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 // Procedural local assets only. Run once, commit outputs. Nothing fetched.
 mkdirSync('public/images/finishes', { recursive: true })
 mkdirSync('public/images/camera', { recursive: true })
-mkdirSync('public/og', { recursive: true })
 
 const finishes = {
   obsidian: ['#43464e', '#0b0b0e', '#26282f'],
@@ -35,18 +34,5 @@ for (const [id, [bg, label, ridge]] of Object.entries(scenes)) {
   console.log(`scene ${id}`)
 }
 
-const routes = [
-  ['home', 'Aether One X', 'Power, without the noise.'],
-  ['cameras', 'Cameras', 'Every focal length.'],
-  ['performance', 'Performance', 'A1 Ultra.'],
-  ['display', 'Display', 'Light, controlled.'],
-  ['software', 'Software', 'Quiet software.'],
-  ['specifications', 'Specifications', 'Nothing hidden.'],
-]
-for (const [id, title, sub] of routes) {
-  writeFileSync(
-    `public/og/${id}.svg`,
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630"><rect width="1200" height="630" fill="#0a0a0c"/><rect x="548" y="150" width="104" height="220" rx="20" fill="none" stroke="#7fb4ff" stroke-width="3"/><text x="600" y="440" font-family="sans-serif" font-size="64" font-weight="600" fill="#f2f2f4" text-anchor="middle">${title}</text><text x="600" y="490" font-family="monospace" font-size="28" fill="#9c9da7" text-anchor="middle">${sub}</text><text x="600" y="560" font-family="monospace" font-size="20" fill="#85868f" text-anchor="middle">Fictional concept. Illustrative values.</text></svg>\n`,
-  )
-  console.log(`og ${id}`)
-}
+// Social cards are PNG captures of the real site now (crawlers reject SVG
+// og:image): see scripts/capture-og.mjs.

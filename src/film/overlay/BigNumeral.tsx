@@ -1,5 +1,7 @@
+import { motion } from 'motion/react'
 import { useCountUp } from '../../hooks/useCountUp.ts'
 import type { ChapterNumeral } from '../chapters.ts'
+import { ITEM } from './motion.ts'
 
 /**
  * Big display numeral with a count-up on chapter entry. Non-numeric values
@@ -19,9 +21,9 @@ export function BigNumeral({
       ? Math.round(animated).toLocaleString('en-US')
       : numeral.value
   return (
-    <p className="mt-4">
-      <span className="spec-num spec-num--stat">{text}</span>{' '}
-      <span className="spec-unit">{numeral.unit}</span>
-    </p>
+    <motion.p className="mt-7 flex items-end gap-3" variants={ITEM}>
+      <span className="spec-num spec-num--stat">{text}</span>
+      <span className="spec-unit pb-[0.6em]">{numeral.unit}</span>
+    </motion.p>
   )
 }

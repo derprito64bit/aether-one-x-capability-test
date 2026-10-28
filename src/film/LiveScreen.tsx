@@ -31,22 +31,25 @@ function paint(
     ctx.fillText('A E T H E R', w / 2, h / 2)
     return
   }
+  // Luminous cobalt wallpaper (site overhaul): the old navy read as a dead
+  // slab through the cover glass on the bright stage. Deep cobalt crown,
+  // azure middle, a warm porcelain bloom rising from below.
   const gradient = ctx.createLinearGradient(0, 0, 0, h)
-  gradient.addColorStop(0, '#0a1322')
-  gradient.addColorStop(0.45, '#0d1c33')
-  gradient.addColorStop(1, '#0a1220')
+  gradient.addColorStop(0, '#0f2c66')
+  gradient.addColorStop(0.5, '#2a64d6')
+  gradient.addColorStop(1, '#7fa6ee')
   ctx.fillStyle = gradient
   ctx.fillRect(0, 0, w, h)
-  const glow = ctx.createRadialGradient(150, 150, 20, 150, 150, 220)
-  glow.addColorStop(0, `rgba(127,180,255,${0.5 * dim})`)
-  glow.addColorStop(1, 'rgba(127,180,255,0)')
+  const glow = ctx.createRadialGradient(w / 2, h * 1.02, 10, w / 2, h * 1.02, h * 0.62)
+  glow.addColorStop(0, `rgba(255,243,226,${0.85 * dim})`)
+  glow.addColorStop(1, 'rgba(255,243,226,0)')
   ctx.fillStyle = glow
   ctx.fillRect(0, 0, w, h)
   if (mode === 'viewfinder') {
     ctx.strokeStyle = `rgba(240,246,255,${0.8 * dim})`
     ctx.lineWidth = 3
     ctx.strokeRect(24, 120, w - 48, 240)
-    ctx.fillStyle = `rgba(127,180,255,${0.9 * dim})`
+    ctx.fillStyle = `rgba(255,255,255,${0.9 * dim})`
     ctx.beginPath()
     ctx.arc(w / 2 + Math.sin(t * 0.8) * 20, 240, 10, 0, Math.PI * 2)
     ctx.fill()
@@ -64,7 +67,7 @@ function paint(
     ctx.fillText(`${hours}:09`, w / 2, 120)
     for (let row = 0; row < 4; row++) {
       for (let col = 0; col < 4; col++) {
-        ctx.fillStyle = `rgba(127,180,255,${(0.25 + ((row + col) % 3) * 0.15) * dim})`
+        ctx.fillStyle = `rgba(255,255,255,${(0.3 + ((row + col) % 3) * 0.16) * dim})`
         ctx.beginPath()
         ctx.roundRect(28 + col * 56, 170 + row * 62, 40, 40, 10)
         ctx.fill()
@@ -73,21 +76,24 @@ function paint(
     return
   }
   if (mode === 'ai') {
-    ctx.fillStyle = `rgba(127,180,255,${(0.5 + 0.3 * Math.sin(t * 2)) * dim})`
+    ctx.fillStyle = `rgba(255,255,255,${(0.55 + 0.3 * Math.sin(t * 2)) * dim})`
     ctx.beginPath()
     ctx.arc(w / 2, h / 2 - 40, 54, 0, Math.PI * 2)
     ctx.fill()
-    ctx.fillStyle = `rgba(4,8,14,${dim})`
+    ctx.fillStyle = `rgba(255,255,255,${0.92 * dim})`
     ctx.font = '500 22px sans-serif'
     ctx.textAlign = 'center'
     ctx.fillText('On-device', w / 2, h / 2 + 80)
     return
   }
-  // wallpaper
-  ctx.fillStyle = `rgba(240,246,255,${0.9 * dim})`
-  ctx.beginPath()
-  ctx.arc(178, 96, 26, 0, Math.PI * 2)
-  ctx.fill()
+  // wallpaper: a soft light bloom high on the cobalt, not a hard disc (the
+  // old navy design's "moon" read as a flat grey blob once the panel UVs
+  // were fixed and the whole texture became visible).
+  const bloom = ctx.createRadialGradient(178, 110, 4, 178, 110, 96)
+  bloom.addColorStop(0, `rgba(235,242,255,${0.55 * dim})`)
+  bloom.addColorStop(1, 'rgba(235,242,255,0)')
+  ctx.fillStyle = bloom
+  ctx.fillRect(0, 0, w, h)
 }
 
 /**

@@ -39,17 +39,22 @@ export function PhoneFrame({ finish = 'obsidian', face = 'front', label }: Phone
         </div>
       )}
       <style>{`
-        .phone-frame { width: 180px; height: 372px; border-radius: 30px; padding: 10px;
-          background: ${meta?.swatch ?? '#0b0b0e'}; border: 1px solid rgba(255,255,255,0.16);
-          box-shadow: 0 30px 80px rgba(0,0,0,0.55); }
-        .phone-frame-screen { position: relative; width: 100%; height: 100%; border-radius: 22px;
-          overflow: hidden; background: #04060c; }
-        .phone-frame-notch { position: absolute; top: 10px; left: 50%; width: 64px; height: 8px;
-          border-radius: 999px; transform: translateX(-50%); background: #000; }
+        /* Same proportions as the 3D body (76.8 x 159.6 mm), the same round
+           punch-hole and the same cobalt wallpaper as the live screen, so the
+           swap from this preview to the 3D canvas never jumps in style. */
+        .phone-frame { width: 180px; height: 372px; border-radius: 32px; padding: 6px;
+          background: ${meta?.swatch ?? '#0b0b0e'};
+          box-shadow: 0 0 0 1px rgba(28,27,25,0.18), inset 0 1px 0 rgba(255,255,255,0.18),
+            0 40px 70px -36px rgba(40,30,10,0.55); }
+        .phone-frame-screen { position: relative; width: 100%; height: 100%; border-radius: 27px;
+          overflow: hidden; background: #0f2c66; }
+        .phone-frame-notch { position: absolute; top: 11px; left: 50%; width: 9px; height: 9px;
+          border-radius: 999px; transform: translateX(-50%); background: #05070c; z-index: 1;
+          box-shadow: 0 0 0 1px rgba(255,255,255,0.08); }
         .phone-frame-wallpaper { position: absolute; inset: 0;
-          background: radial-gradient(120px 200px at 70% 20%, rgba(127,180,255,0.55), transparent 70%),
-            linear-gradient(180deg, #0d1c33, #0a1220); }
-        .phone-frame-back { position: relative; width: 100%; height: 100%; border-radius: 22px;
+          background: radial-gradient(110% 40% at 50% 110%, rgba(255,243,226,0.85), rgba(255,243,226,0) 70%),
+            linear-gradient(180deg, #0f2c66 0%, #2a64d6 50%, #7fa6ee 100%); }
+        .phone-frame-back { position: relative; width: 100%; height: 100%; border-radius: 27px;
           background: ${meta?.swatch ?? '#0b0b0e'}; }
         /* Circular module, centered: knurled collar, triangle lenses,
            periscope window below, iris medallion at the centre. */

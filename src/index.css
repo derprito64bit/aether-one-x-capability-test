@@ -1,40 +1,48 @@
 @import 'tailwindcss';
 
 @theme {
-  /* Cream studio ramp (overnight review): warm paper background so part
-     edges and small hardware read at a glance; the film stage keeps its
-     own dark scrim so the device keeps full contrast. Steps run light to
-     lighter; text ink is dark espresso throughout. */
-  --color-night: #efe9dc;
-  --color-surface: #f6f1e6;
-  --color-elev: #fbf8f1;
-  --color-raise: #fffdf9;
-  --color-ink: #201a12;
-  --color-dim: #5c554a;
-  --color-faint: #655d4f;
+  /* Porcelain studio (user direction: a bright product-photography room,
+     "cream + more light"). Warm-neutral, lower chroma than the first cream
+     pass so the obsidian device and the one cobalt accent carry the colour.
+     Ramp runs page -> lighter panels. Measured contrast in
+     docs/design-tokens.md. */
+  --color-night: #f2f0eb;
+  --color-surface: #f8f7f3;
+  --color-elev: #fcfbf8;
+  --color-raise: #fefdfb;
+  --color-sunken: #e8e5de;
+  --color-ink: #1c1b19;
+  --color-dim: #5d5a54;
+  --color-faint: #66625a;
   --color-aether: #1f5fd0;
-  --color-aether-strong: #0f4fc4;
-  --color-aether-deep: #1c3a6b;
-  /* Warm white for ink on deep fills (toggles, selection). */
-  --color-ink-inverse: #f6f2e9;
+  --color-aether-strong: #1a4fb8;
+  --color-aether-deep: #173b7a;
+  /* Warm white for ink on deep fills (primary buttons, toggles). */
+  --color-ink-inverse: #f7f6f2;
 
-  --color-border-hairline: #d5cdbb;
-  --color-focus: #0f4fc4;
+  --color-border-hairline: #dcd8cf;
+  --color-border-strong: #c9c4b8;
+  --color-focus: #1a4fb8;
   --color-scrim: rgba(13, 15, 24, 0.72);
 
   --glass-tint: rgba(28, 32, 48, 0.62);
   --glass-blur: 18px;
   --glass-saturate: 140%;
-  --glass-rim: rgba(255, 255, 255, 0.14);
+  --glass-rim: rgba(255, 255, 255, 0.5);
   --glass-scrim: rgba(13, 15, 24, 0.55);
 
+  /* One family. Geist carries display and UI; Geist Mono is reserved for
+     technical readouts (units, part numbers, focal lengths). */
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
-  --font-display: 'Space Grotesk Variable', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Geist Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out-soft: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --radius-panel: 1.5rem;
+  --radius-inner: 1rem;
 }
 
 @layer base {
@@ -44,12 +52,14 @@
     overscroll-behavior-y: none;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
+    color-scheme: light;
   }
 
   :root {
     --film-height: 1100vh;
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
+    --page-gutter: clamp(1.25rem, 4vw, 3rem);
   }
 
   @media (min-width: 1024px) {
@@ -72,19 +82,17 @@
     }
   }
 
-  color-scheme: light;
-
   body {
     background: var(--color-night);
     color: var(--color-ink);
     font-family: var(--font-sans);
+    font-feature-settings: 'ss01', 'cv11';
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
 
-  /* Fixed warm wash: faint cool key-blue top-left, faint warm ember
-     bottom-right over the cream page. Text never sits on the wash
-     brighter than the surface ramp. */
+  /* Soft top light over the porcelain page: the studio key, not a colour
+     wash. Fixed and pointer-transparent so it never repaints on scroll. */
   body::before {
     content: '';
     position: fixed;
@@ -92,8 +100,18 @@
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(900px 520px at 12% -4%, rgba(71, 141, 255, 0.1), transparent 65%),
-      radial-gradient(760px 480px at 96% 104%, rgba(232, 160, 106, 0.06), transparent 60%);
+      radial-gradient(1100px 560px at 50% -12%, rgba(255, 255, 255, 0.9), transparent 70%),
+      radial-gradient(900px 600px at 100% 110%, rgba(214, 205, 188, 0.35), transparent 65%);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   section[id] {
@@ -101,8 +119,8 @@
   }
 
   ::selection {
-    background: #7fa9ff;
-    color: #070b14;
+    background: #c9d8f7;
+    color: #0d1630;
   }
 
   :focus-visible {
@@ -116,59 +134,156 @@
   }
 }
 
-.spec-num {
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-variant-numeric: lining-nums tabular-nums;
-  letter-spacing: -0.025em;
-  line-height: 0.84;
-}
+@layer components {
+  /* Page container: one measure for every route. */
+  .page {
+    width: 100%;
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: var(--page-gutter);
+  }
 
-.spec-unit {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.26em;
-  text-transform: uppercase;
-  /* Ink-following: light over the dark film stage (via .film-stage-scope),
-     dark espresso everywhere else. Never a fixed white. */
-  color: color-mix(in srgb, var(--color-ink) 78%, transparent);
-}
+  /* Display type. Weight and colour carry hierarchy; scale steps are few. */
+  .display-xl {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(3rem, 7.4vw, 6.75rem);
+    line-height: 0.94;
+    letter-spacing: -0.048em;
+  }
 
-/* Act hero numeral: compact on small screens, large on desktop. */
-.spec-num--stat {
-  font-size: clamp(56px, 18vw, 96px);
-}
+  .display-lg {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2.25rem, 4.6vw, 4.25rem);
+    line-height: 0.98;
+    letter-spacing: -0.042em;
+  }
 
-@media (min-width: 768px) {
-  .spec-num--stat {
-    font-size: clamp(88px, 17vw, 168px);
+  .display-md {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.5rem, 2.4vw, 2.125rem);
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+  }
+
+  .lede {
+    font-size: clamp(1.0625rem, 1.3vw, 1.25rem);
+    line-height: 1.5;
+    color: var(--color-dim);
+    max-width: 52ch;
+  }
+
+  /* Buttons. Controls are full pills; panels are 24px (documented rule). */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding-inline: 1.25rem;
+    border-radius: 999px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition:
+      transform 160ms var(--ease-out-quint),
+      background-color 200ms var(--ease-out-quint),
+      border-color 200ms var(--ease-out-quint),
+      color 200ms var(--ease-out-quint);
+  }
+
+  .btn:active {
+    transform: scale(0.97);
+  }
+
+  .btn-primary {
+    background: var(--color-aether-strong);
+    color: var(--color-ink-inverse);
+  }
+
+  .btn-primary:hover {
+    background: var(--color-aether-deep);
+  }
+
+  .btn-quiet {
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-ink);
+  }
+
+  .btn-quiet:hover {
+    background: var(--color-raise);
+    border-color: var(--color-ink);
+  }
+
+  /* Hairline-framed panel for real elevation (configurator, demos). */
+  .panel {
+    border-radius: var(--radius-panel);
+    background: var(--color-surface);
+    box-shadow:
+      0 0 0 1px var(--color-border-hairline),
+      0 1px 0 rgba(255, 255, 255, 0.8) inset,
+      0 24px 60px -32px rgba(60, 50, 30, 0.28);
   }
 }
 
-.spec-tech {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  /* Faint token (3.9:1 on cream) so technical labels clear 3:1 on every
-     surface. Never dimmer: axe judges the steady state, not intent. */
-  color: var(--color-faint);
-}
+/* Type roles live in the components layer so a utility on the same
+   element (text colour, size) always wins over the role default. */
+@layer components {
+  .spec-num {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-variant-numeric: lining-nums tabular-nums;
+    letter-spacing: -0.045em;
+    line-height: 0.9;
+  }
 
-.kicker {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--color-dim);
+  .spec-unit {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-dim);
+  }
+
+  /* Act hero numeral: sized to its text column, never wider than the device gap. */
+  .spec-num--stat {
+    font-size: clamp(3.5rem, 13vw, 5.5rem);
+  }
+
+  @media (min-width: 768px) {
+    .spec-num--stat {
+      font-size: clamp(4.5rem, 7.4vw, 7.5rem);
+    }
+  }
+
+  .spec-tech {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    /* Faint token clears 4.5:1 on page and panels; technical labels only. */
+    color: var(--color-faint);
+  }
+
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-dim);
+  }
 }
 
 .reveal {
   opacity: 0;
-  transform: translateY(24px) scale(0.99);
+  transform: translateY(28px);
   transition:
-    opacity 0.8s var(--ease-out-expo),
-    transform 0.8s var(--ease-out-expo);
+    opacity 0.9s var(--ease-out-expo),
+    transform 0.9s var(--ease-out-expo);
   transition-delay: var(--reveal-delay, 0ms);
 }
 
@@ -177,9 +292,8 @@
   transform: none;
 }
 
-/* Inside dark islands (the film stage canvas, the OS phone mock) text
-   keeps the deep ink ramp regardless of the cream page. Scoped override:
-   utilities below this class resolve the deep values. */
+/* Dark islands (the OS phone mock, the inspect tooltip): text keeps a light
+   ramp regardless of the porcelain page. Utilities below resolve these. */
 .dark-scope {
   --color-ink: #f2f2f4;
   --color-dim: #a8adbf;
@@ -189,15 +303,15 @@
   --color-border-hairline: #2c3040;
 }
 
-/* The reverse: light cards nested inside dark islands (the OS home
-   screen panel inside the black phone mock). */
+/* The reverse: light cards nested inside dark islands, and the film overlay
+   while the stage is lit. */
 .light-scope {
-  --color-ink: #201a12;
-  --color-dim: #5c554a;
-  --color-faint: #655d4f;
+  --color-ink: #1c1b19;
+  --color-dim: #5d5a54;
+  --color-faint: #66625a;
   --color-aether: #1f5fd0;
-  --color-aether-strong: #0f4fc4;
-  --color-border-hairline: #d5cdbb;
+  --color-aether-strong: #1a4fb8;
+  --color-border-hairline: #dcd8cf;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -209,6 +323,10 @@
     opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  .btn:active {
+    transform: none;
   }
 }
 

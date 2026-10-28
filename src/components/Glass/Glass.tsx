@@ -114,9 +114,11 @@ export function Glass({ variant, children, className, label }: GlassProps) {
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.35); }
         .glass-chrome { border-radius: 999px; }
         .glass-tooltip { border-radius: 999px; }
-        /* Milky glass on the cream page (panel + chrome); the tooltip
-           stays dark because it floats over the dark film canvas. */
-        .glass-panel, .glass-chrome { background: rgba(250, 247, 240, 0.72); }
+        /* Milky glass on the porcelain page (panel + chrome); the tooltip
+           stays dark so the readout pops over any stage tone. */
+        .glass-panel, .glass-chrome { background: rgba(251, 250, 247, 0.74); }
+        .glass-chrome { box-shadow: 0 0 0 1px rgba(28, 27, 25, 0.07),
+          0 12px 32px -14px rgba(40, 30, 10, 0.28); }
         [data-tier='layered'] .glass-surface, .glass-surface[data-tier='layered'] {
           backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
           -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); }

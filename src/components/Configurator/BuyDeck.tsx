@@ -1,14 +1,18 @@
+import { CheckIcon, InfoIcon } from '../icons.tsx'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { DEFAULT_STORAGE_GB, FINISHES, STORAGE_OPTIONS } from '../../data/product.ts'
 import { formatPrice } from '../../lib/format.ts'
-import { Glass } from '../Glass/Glass.tsx'
-import { FINISH_PARAMS } from '../PhoneViewer/phoneMaterials.ts'
 import { PhoneConfigProvider, usePhoneConfig } from '../PhoneViewer/PhoneConfig.tsx'
 import { PhoneViewer } from '../PhoneViewer/PhoneViewer.tsx'
 
+const SPRING = { type: 'spring', stiffness: 520, damping: 38 } as const
+
 /**
  * Closing configurator deck. Finish and capacity lerp the live 3D materials
- * through shared config; the sticky summary bar carries price and CTA.
+ * through shared config; the summary carries the price and the one
+ * purchase action.
  */
 export function BuyDeck() {
   return (
@@ -21,28 +25,61 @@ export function BuyDeck() {
 function BuyDeckInner() {
   const { finish, setFinish } = usePhoneConfig()
   const [storageGb, setStorageGb] = useStateGb()
+  const [asks, setAsks] = useState(0)
+  const reduced = useReducedMotion()
   const option = STORAGE_OPTIONS.find((s) => s.gb === storageGb) ?? STORAGE_OPTIONS[1]
   const active = FINISHES.find((f) => f.id === finish) ?? FINISHES[0]
   if (option === undefined || active === undefined) return null
-  const accent = FINISH_PARAMS[finish]?.uiAccent ?? '#7fb4ff'
 
   return (
     <section
       id="buy"
       tabIndex={-1}
       aria-label="Configure your Aether One X"
-      className="mx-auto max-w-6xl px-4 py-16"
+      className="page pt-24 focus-visible:outline-none md:pt-32"
     >
-      <Glass variant="panel" label="Configurator">
-        <div className="grid gap-8 p-8 md:grid-cols-2 md:p-12">
-          <div>
-            <PhoneViewer pose="hero" label={`Aether One X in ${active.name}`} sharedConfig />
+      <div className="max-w-2xl">
+        <h2 className="display-lg">Make it yours.</h2>
+        <p className="lede mt-4">
+          Pick a finish and a capacity. The phone updates as you choose, so what you pick is what
+          you see.
+        </p>
+      </div>
+
+      <div className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_1fr] lg:gap-10">
+        {/* Stage: sticky on desktop so the phone stays beside every choice. */}
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <div className="panel relative overflow-hidden">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(60% 55% at 50% 42%, rgba(255,255,255,0.95), rgba(255,255,255,0) 70%), linear-gradient(180deg, #f3f1ec 0%, #e6e2d9 100%)',
+              }}
+            />
+            <div className="relative">
+              <PhoneViewer
+                pose="hero"
+                label={`Aether One X in ${active.name}`}
+                sharedConfig
+                className="flex h-[440px] items-center justify-center md:h-[600px]"
+                canvasClassName="h-[440px] w-full md:h-[600px]"
+              />
+            </div>
+            <p className="relative px-6 pb-5 text-sm text-(--color-dim)">
+              {active.name}, {option.label}.
+            </p>
           </div>
-          <div>
-            <p className="kicker">Configure</p>
-            <h2 className="spec-num mt-3 text-4xl md:text-5xl">Make it yours.</h2>
-            <h3 className="spec-tech mt-6">Finish</h3>
-            <div role="group" aria-label="Choose a finish" className="mt-2 flex gap-3">
+        </div>
+
+        <div className="flex flex-col gap-5">
+          <div className="panel p-6 md:p-8">
+            <div className="flex items-baseline justify-between gap-4">
+              <h3 className="text-lg font-semibold tracking-[-0.02em]">Finish</h3>
+              <p className="text-sm text-(--color-dim)">{FINISHES.length} options</p>
+            </div>
+            <div role="group" aria-label="Choose a finish" className="mt-5 flex flex-wrap gap-3">
               {FINISHES.map((f) => (
                 <button
                   key={f.id}
@@ -53,55 +90,149 @@ function BuyDeckInner() {
                   title={`${f.name}: ${f.tagline}`}
                   data-testid={`finish-${f.id}`}
                   data-active={finish === f.id}
-                  className="h-12 w-12 rounded-full border-2 border-transparent"
-                  style={{
-                    background: f.swatch,
-                    borderColor: finish === f.id ? accent : 'transparent',
-                  }}
-                />
-              ))}
-            </div>
-            <p className="mt-2 text-sm text-(--color-dim)" data-testid="finish-name">
-              {active.name}: {active.tagline}
-            </p>
-            <span
-              aria-hidden="true"
-              data-testid="finish-underline"
-              className="mt-1 block h-0.5 w-16 rounded-full"
-              style={{ background: accent }}
-            />
-            <h3 className="spec-tech mt-6">Capacity</h3>
-            <div role="group" aria-label="Choose a capacity" className="mt-2 flex flex-wrap gap-2">
-              {STORAGE_OPTIONS.map((s) => (
-                <button
-                  key={s.gb}
-                  type="button"
-                  onClick={() => setStorageGb(s.gb)}
-                  aria-pressed={storageGb === s.gb}
-                  data-testid={`capacity-${s.gb}`}
-                  data-active={storageGb === s.gb}
-                  className="min-h-11 rounded-full border border-(--color-border-hairline) px-5 text-sm text-(--color-dim) data-[active=true]:bg-(--color-elev) data-[active=true]:text-(--color-ink)"
+                  className="relative flex h-14 w-14 items-center justify-center rounded-full transition-transform duration-200 active:scale-95"
                 >
-                  {s.label} · {formatPrice(s.price)}
+                  {finish === f.id ? (
+                    <motion.span
+                      layoutId={reduced ? undefined : 'finish-ring'}
+                      aria-hidden="true"
+                      className="absolute inset-0 rounded-full ring-2 ring-(--color-ink)"
+                      transition={SPRING}
+                    />
+                  ) : null}
+                  <span
+                    aria-hidden="true"
+                    className="h-11 w-11 rounded-full shadow-[inset_0_1px_1px_rgba(255,255,255,0.55),inset_0_-5px_12px_rgba(0,0,0,0.28)]"
+                    style={{ background: f.swatch }}
+                  />
                 </button>
               ))}
             </div>
+            <div className="mt-5 min-h-[4.5rem]" aria-live="polite">
+              <p className="font-medium" data-testid="finish-name">
+                {active.name}: {active.tagline}
+              </p>
+              <p className="mt-1 text-sm leading-relaxed text-(--color-dim)">
+                {active.description}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="sticky bottom-4 mx-8 mb-8 flex items-center justify-between rounded-full border border-(--color-border-hairline) bg-(--color-surface)/85 px-6 py-3 backdrop-blur-md md:mx-12">
-          <p className="text-sm text-(--color-dim)">
-            {active.name} · {option.label}
+
+          <div className="panel p-6 md:p-8">
+            <h3 className="text-lg font-semibold tracking-[-0.02em]">Capacity</h3>
+            <div role="group" aria-label="Choose a capacity" className="mt-5 grid gap-2.5">
+              {STORAGE_OPTIONS.map((s) => {
+                const on = storageGb === s.gb
+                return (
+                  <button
+                    key={s.gb}
+                    type="button"
+                    onClick={() => setStorageGb(s.gb)}
+                    aria-pressed={on}
+                    data-testid={`capacity-${s.gb}`}
+                    data-active={on}
+                    className="relative flex min-h-14 items-center justify-between rounded-2xl px-5 text-left transition-colors duration-200 hover:bg-(--color-raise)"
+                  >
+                    {on ? (
+                      <motion.span
+                        layoutId={reduced ? undefined : 'capacity-card'}
+                        aria-hidden="true"
+                        className="absolute inset-0 rounded-2xl bg-(--color-raise) shadow-[0_0_0_1.5px_var(--color-ink)]"
+                        transition={SPRING}
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-0 rounded-2xl shadow-[0_0_0_1px_var(--color-border-hairline)]"
+                      />
+                    )}
+                    <span className="relative flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className={`flex h-5 w-5 items-center justify-center rounded-full transition-colors ${
+                          on
+                            ? 'bg-(--color-ink) text-(--color-ink-inverse)'
+                            : 'shadow-[inset_0_0_0_1.5px_var(--color-border-strong)]'
+                        }`}
+                      >
+                        {on ? <CheckIcon size={12} weight="bold" /> : null}
+                      </span>
+                      <span className="font-medium">{s.label}</span>
+                    </span>
+                    <span className="relative text-(--color-dim) tabular-nums">
+                      {formatPrice(s.price)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="panel p-6 md:p-8">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-sm text-(--color-dim)">Your Aether One X</p>
+                <p className="mt-1 font-medium">
+                  {active.name}, {option.label}
+                </p>
+              </div>
+              <p
+                className="spec-num relative overflow-hidden text-4xl md:text-5xl"
+                data-testid="buy-price"
+              >
+                <AnimatePresence mode="popLayout" initial={false}>
+                  <motion.span
+                    key={option.price}
+                    className="inline-block"
+                    initial={reduced ? { opacity: 0 } : { y: '60%', opacity: 0 }}
+                    animate={{ y: '0%', opacity: 1 }}
+                    exit={reduced ? { opacity: 0 } : { y: '-60%', opacity: 0 }}
+                    transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    {formatPrice(option.price)}
+                  </motion.span>
+                </AnimatePresence>
+              </p>
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="btn btn-primary flex-1 sm:flex-none sm:px-8"
+                onClick={() => setAsks((n) => n + 1)}
+              >
+                Buy
+              </button>
+              <Link to="/specifications" className="btn btn-quiet flex-1 sm:flex-none">
+                Full specs
+              </Link>
+            </div>
+            {/* The live region is mounted from the start so the notice is
+                announced reliably; each press remounts its text (keyed by
+                the press count) so repeat presses announce again. */}
+            <div role="status" aria-live="polite">
+              <AnimatePresence initial={false} mode="popLayout">
+                {asks > 0 ? (
+                  <motion.p
+                    key={asks}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                    className="flex gap-2 overflow-hidden pt-4 text-sm leading-relaxed text-(--color-dim)"
+                  >
+                    <InfoIcon size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    Aether One X is a concept, so nothing ships. Your {active.name.toLowerCase()}{' '}
+                    {option.label} build is noted in spirit.
+                  </motion.p>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          </div>
+          <p className="text-xs text-(--color-faint)">
+            Prices and specifications are illustrative demonstration values.
           </p>
-          <p className="flex items-center gap-4">
-            <span className="spec-num text-2xl" data-testid="buy-price">
-              {formatPrice(option.price)}
-            </span>
-            <span className="rounded-full bg-(--color-aether-strong) px-5 py-2 text-sm font-semibold text-(--color-ink-inverse)">
-              Buy
-            </span>
-          </p>
         </div>
-      </Glass>
+      </div>
     </section>
   )
 }

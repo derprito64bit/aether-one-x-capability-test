@@ -8,9 +8,14 @@ import { cursorAt } from '../teardown/layers.ts'
 import {
   calloutBridge,
   featureAnchorBridge,
+  overlayCursor,
   layoutCallouts,
   type CalloutLayout,
 } from './callouts.ts'
+
+/** Solid label chip: legible over any part, any stage tone. */
+const LABEL_CHIP =
+  'absolute left-0 top-0 max-w-52 rounded-xl bg-(--color-raise)/92 px-3 py-2 shadow-[0_0_0_1px_var(--color-border-hairline),0_8px_20px_-10px_rgba(40,30,10,0.35)] backdrop-blur-sm'
 
 const ENTRY_TRAVEL = 14
 const FEATURE_TRAVEL = 10
@@ -40,6 +45,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
   const widths = useRef<number[]>([])
   const pool = useRef<THREE.Vector3[]>([])
   const featureVec = useRef(new THREE.Vector3())
+  const featureEdge = useRef(new THREE.Vector3())
 
   useEffect(() => {
     let raf = 0
@@ -70,8 +76,12 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
       // so the pool only brackets it: establishing stack and restack. Nine
       // simultaneous labels over a featured layer is clutter, not diagram.
       // The featured layer gets exactly one pointer of its own below.
-      const cursor = cursorAt(p)
-      const inFeatureRun = p >= 0.25 && p < 0.52 && cursor > 0.5 && cursor < 9.5
+      // Site overhaul: the pool is off for the whole teardown span. Its
+      // opacity is only non-zero inside the teardown, and the old cursor
+      // bounds left two ~15ms windows where half-faded chips flashed and
+      // overlapped; the per-layer pointer carries the labelling instead.
+      const cursor = overlayCursor(cursorAt(p), performance.now())
+      const inFeatureRun = p >= 0.25 && p < 0.52
       const poolActive =
         st.calloutOpacity > 0.01 &&
         !inFeatureRun &&
@@ -205,10 +215,28 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
           }
           const lx = layout.x
           const ly = layout.y
-          const side = layout.side
+          // Clear the part itself: offset by its projected half-extent
+          // (measured along the camera's right axis), on the side away
+          // from the stack centre. A fixed 18px offset from the centre put
+          // the chip over a third of the camera module.
+          featureEdge.current
+            .setFromMatrixColumn(camera.matrixWorld, 0)
+            .multiplyScalar(featureAnchorBridge.radius)
+            .add(featureVec.current)
+            .project(camera)
+          const radiusPx = Math.abs(((featureEdge.current.x + 1) / 2) * w - lx)
+          featureEdge.current
+            .set(featureAnchorBridge.sx, featureAnchorBridge.sy, featureAnchorBridge.sz)
+            .project(camera)
+          const stackX = ((featureEdge.current.x + 1) / 2) * w
+          const side = lx >= stackX ? 'right' : 'left'
           const travel = reduced ? 0 : FEATURE_TRAVEL * (1 - feature.opacity)
           const cachedWidth = Number(featureLabel.dataset.w ?? 0)
-          const labelX = side === 'right' ? lx + 18 + travel : lx - 18 - travel - cachedWidth
+          const offset = radiusPx + 18 + travel
+          const labelX = Math.min(
+            w - cachedWidth - 8,
+            Math.max(8, side === 'right' ? lx + offset : lx - offset - cachedWidth),
+          )
           featureLabel.style.transform = `translate(${labelX.toFixed(1)}px, ${(ly - 14).toFixed(1)}px)`
           const anchorX = side === 'right' ? labelX : labelX + cachedWidth
           featurePath.setAttribute(
@@ -257,21 +285,21 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
           ref={(el) => {
             labelRefs.current[i] = el
           }}
-          className="absolute left-0 top-0 max-w-44"
+          className={LABEL_CHIP}
           data-testid={`callout-${def.partId}`}
         >
-          <p className="spec-tech text-(--color-ink)">{def.title}</p>
-          <p className="spec-tech text-(--color-dim)">{def.body}</p>
+          <p className="text-[13px] font-medium leading-tight text-(--color-ink)">{def.title}</p>
+          <p className="mt-1 font-mono text-[10.5px] leading-snug text-(--color-dim)">{def.body}</p>
         </div>
       ))}
       <div
         ref={(el) => {
           featureLabelRef.current = el
         }}
-        className="absolute left-0 top-0 max-w-44"
+        className={LABEL_CHIP}
         data-testid="callout-featured"
       >
-        <p className="spec-tech text-(--color-ink)">Featured part</p>
+        <p className="text-[13px] font-medium leading-tight text-(--color-ink)">Featured part</p>
       </div>
     </div>
   )

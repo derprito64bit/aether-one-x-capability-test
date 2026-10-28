@@ -44,12 +44,13 @@ export function BoardPart({
             can.x - can.w / 2 + ((ix + 0.5) / nx) * can.w,
             can.y - can.h / 2 + ((iy + 0.5) / ny) * can.h,
             // Proud of the lid's rear face so the dots read as perforations.
-            MAIN_REAR_Z - can.rise - 0.00021,
+            MAIN_REAR_Z - can.rise - 0.0002 - 0.00001,
           ])
         }
       }
     }
-    const geo = new THREE.CylinderGeometry(0.0002, 0.0002, 0.00006, 8)
+    // Discs on the lid face: axis turned onto z (cylinders run along y).
+    const geo = new THREE.CylinderGeometry(0.0002, 0.0002, 0.00002, 8).rotateX(Math.PI / 2)
     const mesh = new THREE.InstancedMesh(geo, materials.dark, positions.length)
     const m = new THREE.Matrix4()
     positions.forEach(([x, y, z], i) => {
@@ -73,10 +74,11 @@ export function BoardPart({
           <boxGeometry args={[MAIN_BOARD.w, MAIN_BOARD.h, MAIN_BOARD.thickness]} />
           <primitive object={materials.board} attach="material" />
         </mesh>
-        {/* Gold trace strips */}
+        {/* Gold trace strips, a 0.01mm film on the rear face (they stood
+            0.2mm off it, into the parts mounted over them) */}
         {[-0.02, 0.012].map((x) => (
-          <mesh key={x} position={[x, MAIN_BOARD.cy, MAIN_BOARD.cz - 0.0005]}>
-            <boxGeometry args={[0.004, MAIN_BOARD.h - 0.004, 0.0002]} />
+          <mesh key={x} position={[x, MAIN_BOARD.cy, MAIN_REAR_Z - 0.000005]}>
+            <boxGeometry args={[0.004, MAIN_BOARD.h - 0.004, 0.00001]} />
             <primitive object={materials.trace} attach="material" />
           </mesh>
         ))}
@@ -105,15 +107,13 @@ export function BoardPart({
           </mesh>
         ))}
       </group>
-      {/* Coaxial RF cables along both edges */}
+      {/* Coaxial RF cables along both edges. Cylinders already run along
+          y; the old PI/2 turn stood each 112mm run on end through the
+          phone. Seat on the mesh, not the group (the teardown driver owns
+          group transforms). */}
       {COAX.map((run) => (
-        <group
-          key={run.id}
-          ref={register(run.id)}
-          position={[run.x, (run.yTop + run.yBottom) / 2, MAIN_BOARD.cz - 0.0004]}
-          rotation={[Math.PI / 2, 0, 0]}
-        >
-          <mesh>
+        <group key={run.id} ref={register(run.id)}>
+          <mesh position={[run.x, (run.yTop + run.yBottom) / 2, MAIN_BOARD.cz - 0.0004]}>
             <cylinderGeometry args={[run.d / 2, run.d / 2, run.yTop - run.yBottom, 8]} />
             <primitive object={materials.dark} attach="material" />
           </mesh>

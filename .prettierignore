@@ -1,0 +1,10 @@
+# Not site source: vendored agent skills and saved prompt briefs. Checking
+# them made `npm run format` (the first CI gate) fail, which skipped the
+# build, e2e and Lighthouse jobs on every push.
+.claude/
+Claude outputs/
+
+# Build and test output.
+dist/
+test-results/
+playwright-report/

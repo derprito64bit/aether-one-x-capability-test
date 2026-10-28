@@ -1,5 +1,10 @@
 import * as THREE from 'three'
+import { DIM } from '../components/PhoneViewer/phoneDimensions.ts'
+import { projectedExtentM, type ProjectedExtents } from '../lib/projected-extent.ts'
+import { dollyZoomFov } from '../zoom/zoom.ts'
+import { fitFov, macroFloorFov } from './framing.ts'
 import { smoothstep, type FilmKey } from './key.ts'
+import { layerWindow } from './states.ts'
 import { KEYS } from './timeline.ts'
 
 export interface FilmSample {
@@ -159,4 +164,73 @@ export function sampleFilm(p: number): FilmSample {
 /** Exposes the authored keys for tests and the dev scrubber. */
 export function filmKeys(): readonly FilmKey[] {
   return KEYS
+}
+
+/** Caller-owned scratch for filmTargetFov: camera and aim tuples, extents. */
+export interface FovScratch {
+  cam: [number, number, number]
+  tgt: [number, number, number]
+  extents: ProjectedExtents
+}
+
+/**
+ * The FOV the film aims for at a sample: the authored lens, blended toward
+ * the responsive fit of the (separated) stack, the narrow-viewport macro
+ * floor, and the silicon-beat vertigo. One function for the director (live
+ * camera, damped aim) and the continuity test (sampled camera), so the
+ * test measures what ships. `stackSep` widens the fit box with the stack;
+ * `vertigoCursor` is null under reduced motion. Zero allocation: the
+ * caller fills scratch.cam and scratch.tgt.
+ */
+export function filmTargetFov(
+  t: FilmSample,
+  p: number,
+  aspect: number,
+  gap: number,
+  stackSep: number,
+  distance: number,
+  vertigoCursor: number | null,
+  scratch: FovScratch,
+): number {
+  let target = t.fov
+  if (t.fit !== null) {
+    // Size the fit to the separated stack, not one plate (round 03
+    // A.6.2): the box depth grows with the separation, so framing opens
+    // as the layers lift and closes as they restack.
+    projectedExtentM(
+      { w: DIM.w, h: DIM.h, t: DIM.t + 9 * gap * stackSep },
+      t.scale,
+      t.rx,
+      t.ry,
+      t.rz,
+      scratch.cam,
+      scratch.tgt,
+      scratch.extents,
+    )
+    const fitValue = fitFov({
+      fit: t.fit,
+      distanceM: distance,
+      aspect,
+      scale: t.scale,
+      rxRad: t.rx,
+      ryRad: t.ry,
+      pxM: t.px,
+      maxFovDeg: t.fovMax,
+      extents: scratch.extents,
+    })
+    const w = Math.min(1, Math.max(0, t.fit))
+    target = Math.min(t.fovMax, t.fov + (fitValue - t.fov) * w)
+  }
+  if (aspect < 0.8) {
+    const floor = macroFloorFov(p, distance, aspect)
+    if (floor > target) target = floor
+  }
+  // Vertigo once, on the silicon feature: widen the lens while the camera
+  // pushes in so the die holds size and the background warps. Derived from
+  // the layer cursor, not raw progress, so the beat tracks layer 5.
+  if (vertigoCursor !== null) {
+    const w = layerWindow(vertigoCursor, 5, 0.5, 0.5)
+    if (w > 0) target += (dollyZoomFov(target, w * 0.12, distance) - target) * w
+  }
+  return target
 }

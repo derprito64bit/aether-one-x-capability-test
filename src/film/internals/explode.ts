@@ -17,7 +17,7 @@ import {
   VAPOR_CHAMBER,
 } from './layout.ts'
 import { PERISCOPE, TOF } from '../../components/PhoneViewer/phoneDimensions.ts'
-import { lensSeat } from '../../components/PhoneViewer/CameraAssembly.tsx'
+import { lensSeat } from '../../components/PhoneViewer/cameraLayout.ts'
 import { LENSES } from '../../components/PhoneViewer/phoneDimensions.ts'
 
 /**

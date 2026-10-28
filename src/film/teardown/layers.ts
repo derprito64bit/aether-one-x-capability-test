@@ -81,7 +81,7 @@ export const TEARDOWN_LAYERS: TeardownLayer[] = [
     id: 'midframe',
     index: 2,
     shell: ['frame'],
-    parts: [...SCREWS, 'haptic', 'speaker', 'earpiece', 'port-block'],
+    parts: [...SCREWS, 'haptic', 'speaker', 'earpiece'],
     copyKey: 'midframe',
     accent: '#b8c2d0',
     featureScale: 1.04,
@@ -97,8 +97,8 @@ export const TEARDOWN_LAYERS: TeardownLayer[] = [
     copyKey: 'battery',
     accent: '#c4d99a',
     featureScale: 1.06,
-    heroPivot: [0, -0.021] as const,
-    featureHalfM: 0.039, // cell h 0.078
+    heroPivot: [0, -0.01675] as const,
+    featureHalfM: 0.0348, // cell h 0.0695
     weight: 'heavy',
   },
   {
@@ -111,7 +111,8 @@ export const TEARDOWN_LAYERS: TeardownLayer[] = [
       'btb-flex',
       'coax-l',
       'coax-r',
-      'shield-lid',
+      // USB-C block rides the sub-board it is soldered to.
+      'port-block',
       'shield-fence',
       'nand',
       'modem',
@@ -127,14 +128,16 @@ export const TEARDOWN_LAYERS: TeardownLayer[] = [
     accent: '#7fd4b0',
     featureScale: 1.08,
     heroPivot: [0, 0.042] as const,
-    featureHalfM: 0.069, // main + sub board union, y -0.0725 to 0.065
+    featureHalfM: 0.0715, // main + sub board union, y -0.078 to 0.065
     weight: 'medium',
   },
   {
     id: 'silicon',
     index: 5,
     shell: [],
-    parts: ['substrate', 'die', 'bga-array', 'decoupling-cluster'],
+    // Shield lids sit behind the die: they lift with the silicon so the
+    // die never passes through a lid while the stack opens.
+    parts: ['substrate', 'die', 'bga-array', 'decoupling-cluster', 'shield-lid'],
     copyKey: 'silicon',
     accent: '#ffc978',
     featureScale: 1.12,
@@ -205,9 +208,16 @@ export const LAYER_GAP = 0.0085
 /** Tighter gap on narrow viewports so the stack fits. */
 export const LAYER_GAP_COMPACT = 0.0065
 
-/** Layer offset = (index - (count - 1) / 2) * gap * separation. */
+/**
+ * Layer offset = ((count - 1) / 2 - index) * gap * separation. Front layers
+ * (low index) lift toward +z, the phone's front, so the stack opens in its
+ * physical order: cover glass on top, rear panel at the bottom. The sign
+ * used to be reversed, which sent the glass down through every other layer
+ * (and the rear panel up through them) during the peel, and parked the
+ * camera module inside the rear panel.
+ */
 export function layerOffset(index: number, count: number, gap: number, separation: number): number {
-  return (index - (count - 1) / 2) * gap * separation
+  return ((count - 1) / 2 - index) * gap * separation
 }
 
 /** Part id to layer index, covering the whole explode registry. */
@@ -225,17 +235,31 @@ export function cursorAt(p: number): number {
 }
 
 /**
- * Top-down peel (sandwich rewrite): every layer rides its own slot offset
- * and nothing else — no detach travel, no flip, no scale bump. The cover
- * glass (index 0) lifts first and the rear panel (index 9) lands last; all
- * ten arrive by sep = 1, so the open sandwich holds through the tour and
- * restacks in exact mirror on reverse. Pure function of sep.
+ * Outside-in peel (sandwich rewrite): every layer rides its own slot
+ * offset. The stack opens from both faces at once: the cover glass
+ * (index 0) and the rear panel (index 9) lead, each half follows from
+ * the outside in, and the two middle layers land last; all ten arrive by
+ * sep = 1, so the open sandwich holds through the tour and restacks in
+ * exact mirror on reverse. Pure function of sep.
+ *
+ * Outside-in is what keeps the peel collision-free: in each half the
+ * outer layer starts no later and travels further than the layer inside
+ * it, so every gap only ever widens (layerStack.test.tsx samples the whole
+ * peel). Front-first ordering let the rear panel, which travels furthest,
+ * start last, so the inner rear layers drove down through it.
  */
-const PEEL_STAGGER = 0.04
-const PEEL_SPAN = 0.64 // worst stagger 0.36 + span: layer 9 lands at 1.0
+const PEEL_STAGGER = 0.08
+// Worst stagger plus span is exactly 1: the middle pair lands at sep 1.
+const PEEL_SPAN = 1 - 4 * PEEL_STAGGER
+
+/** Stagger rank: 0 for the two faces, 4 for the two middle layers. */
+export function peelRank(index: number): number {
+  return index <= 4 ? index : 9 - index
+}
+
 export function peelLocal(sep: number, index: number): number {
   const t = Math.min(1, Math.max(0, sep))
-  return Math.min(1, Math.max(0, (t - index * PEEL_STAGGER) / PEEL_SPAN))
+  return Math.min(1, Math.max(0, (t - peelRank(index) * PEEL_STAGGER) / PEEL_SPAN))
 }
 
 /** Damping rate per weight class: mass inferable from motion alone. */

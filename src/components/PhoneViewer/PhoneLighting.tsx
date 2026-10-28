@@ -46,8 +46,11 @@ export function PhoneLighting({
       <primitive object={rig.rearSoft} />
       <directionalLight position={[-0.3, -0.6, -1]} intensity={1.5} color="#7fb4ff" />
       <directionalLight position={[-0.9, 0.2, 0.6]} intensity={0.8} color="#bcd2ff" />
+      {/* Screen bounce sits low and in front, off the camera's mirror line:
+          on the face axis its specular landed dead centre on the glass as
+          a white blob over the wallpaper. */}
       <pointLight
-        position={[0, 0.02, 0.45]}
+        position={[0, -0.24, 0.3]}
         intensity={0.32}
         distance={1.4}
         decay={2}

@@ -44,9 +44,11 @@ export function SiliconPart({
     const geo = new THREE.BoxGeometry(0.001, 0.0005, 0.0004)
     const mesh = new THREE.InstancedMesh(geo, materials.dark, 12)
     const m = new THREE.Matrix4()
+    // Ring radius clears the SoC can's fence walls (at 10.5mm the caps
+    // straddled them).
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2
-      m.setPosition(SOC.x + Math.cos(a) * 0.0105, SOC.y + Math.sin(a) * 0.0105, REAR_Z - 0.0002)
+      m.setPosition(SOC.x + Math.cos(a) * 0.0125, SOC.y + Math.sin(a) * 0.0125, REAR_Z - 0.0002)
       mesh.setMatrixAt(i, m)
     }
     mesh.instanceMatrix.needsUpdate = true
@@ -61,8 +63,10 @@ export function SiliconPart({
           <primitive object={materials.substrate} attach="material" />
         </mesh>
         {/* Additive circuit ring under focus, rear-facing */}
+        {/* Inside the 16mm package outline (at 9-10.5mm it ran through
+            the shield fence) */}
         <mesh position={[SOC.x, SOC.y, SUBSTRATE_Z - 0.00041]} rotation={[0, Math.PI, 0]}>
-          <ringGeometry args={[0.009, 0.0105, 48]} />
+          <ringGeometry args={[0.0066, 0.0076, 48]} />
           <primitive object={materials.trace} attach="material" />
         </mesh>
       </group>

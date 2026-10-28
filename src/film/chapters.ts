@@ -12,6 +12,7 @@ import {
 import { formatNumber } from '../lib/format.ts'
 import type { ActId } from './key.ts'
 import type { CalloutDef } from './overlay/callouts.ts'
+import { cameraFeature } from './teardown/transform.ts'
 
 export interface ChapterNumeral {
   value: string
@@ -165,7 +166,7 @@ export const TEARDOWN_COPY: TeardownCopy[] = [
     key: 'silicon',
     kicker: CHIPSET.name,
     headline: 'The hero beat.',
-    body: `A ${CHIPSET.dieAreaMm2} mm2 die that runs every model on-device. Nothing leaves the phone.`,
+    body: `A ${CHIPSET.dieAreaMm2} mm² die that runs every model on-device. Nothing leaves the phone.`,
     figure: `${PERFORMANCE.npu.hero.value} ${PERFORMANCE.npu.hero.suffix} neural engine`,
   },
   {
@@ -296,6 +297,14 @@ export function featuredCallout(cursor: number): FeatureCallout | null {
   const index = Math.floor(cursor)
   const def = FEATURE_CALLOUT_PART[index]
   if (def === undefined) return null
+  // The camera layer slides out of the stack and back inside its own
+  // beat: its pointer shares that window so it rides the module out and
+  // back, instead of appearing only after the move and vanishing before
+  // the return.
+  if (index === 8) {
+    const opacity = cameraFeature(cursor)
+    return opacity > 0.001 ? { ...def, opacity } : null
+  }
   const d = cursor - index
   if (d < 0.15 || d > 0.95) return null
   const entry = Math.min(1, Math.max(0, (d - 0.15) / 0.15))

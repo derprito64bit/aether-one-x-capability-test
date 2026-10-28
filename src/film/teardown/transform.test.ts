@@ -1,7 +1,7 @@
 import { Group } from 'three'
 import { describe, expect, it } from 'vitest'
 import { LAYER_GAP, TEARDOWN_LAYERS, layerOffset, peelLocal } from './layers.ts'
-import { applyLayerTransform } from './transform.ts'
+import { CAMERA_SLIDE, applyLayerTransform, cameraFeature, cameraPhases } from './transform.ts'
 
 /** Shared layer transform (round 03 A.6.4): one helper, both drivers. */
 describe('applyLayerTransform', () => {
@@ -48,32 +48,62 @@ describe('applyLayerTransform', () => {
     }
   })
 
-  it('parks the camera module lens-up at full separation', () => {
-    // Turn is the layer's own peel: parked by sep 1, exact at sep 0.
+  it('rides its slot face-down through the peel, turning only in its own beat', () => {
+    // Full separation, outside the camera beat: on the slot, unturned.
+    const parked = new Group()
+    applyLayerTransform(parked, TEARDOWN_LAYERS[8]!, 1, LAYER_GAP, 1)
+    expect(parked.rotation.x).toBe(0)
+    expect(parked.position.x).toBe(0)
+    expect(parked.position.z).toBeCloseTo(layerOffset(8, 10, LAYER_GAP, 1), 12)
+    // Mid-peel: never turned (a turn in the stack swept the 47mm module
+    // edge-on through its neighbours).
+    for (const sep of [0.2, 0.5, 0.8]) {
+      const g = new Group()
+      applyLayerTransform(g, TEARDOWN_LAYERS[8]!, sep, LAYER_GAP, 1)
+      expect(g.rotation.x).toBe(0)
+    }
+    // In its beat: slid clear of the stack, then lens-up about the pivot.
     const g = new Group()
-    applyLayerTransform(g, TEARDOWN_LAYERS[8]!, 1, LAYER_GAP, 1)
+    applyLayerTransform(g, TEARDOWN_LAYERS[8]!, 1, LAYER_GAP, 1, undefined, {
+      feature: cameraFeature(8.5),
+    })
     expect(g.rotation.x).toBeCloseTo(Math.PI, 12)
-    // Stays on its slot upside-down: pivot held, slot carried.
-    expect(g.position.x).toBeCloseTo(0, 12)
+    expect(g.position.x).toBeCloseTo(CAMERA_SLIDE, 12)
     expect(g.position.y).toBeCloseTo(2 * 0.0458, 12)
     expect(g.position.z).toBeCloseTo(layerOffset(8, 10, LAYER_GAP, 1), 12)
+    // Slide completes before the turn starts, so it turns clear in plan.
+    for (let f = 0; f <= 1.0001; f += 0.01) {
+      const ph = cameraPhases(f)
+      if (ph.turn > 0) expect(ph.slide).toBe(1)
+    }
     const rest = new Group()
     applyLayerTransform(rest, TEARDOWN_LAYERS[8]!, 0, LAYER_GAP, 1)
     expect(rest.rotation.x).toBe(0)
     expect(rest.position.length()).toBeLessThan(1e-9)
   })
 
-  it('peels glass first: front layers travel further mid-separation', () => {
+  it('adds act lifts to the goal, never to the damped position', () => {
+    const layer = TEARDOWN_LAYERS[5]!
+    const g = new Group()
+    const goal = layerOffset(5, 10, LAYER_GAP, 1) - 0.004
+    for (let k = 0; k < 300; k++) {
+      applyLayerTransform(g, layer, 1, LAYER_GAP, 0.06, undefined, { liftZ: -0.004 })
+    }
+    expect(g.position.z).toBeCloseTo(goal, 9)
+  })
+
+  it('peels outside-in: both faces lead mid-separation', () => {
     const a = new Group()
     const b = new Group()
+    const inner = new Group()
     applyLayerTransform(a, TEARDOWN_LAYERS[0]!, 0.3, LAYER_GAP, 1)
     applyLayerTransform(b, TEARDOWN_LAYERS[9]!, 0.3, LAYER_GAP, 1)
-    expect(Math.abs(a.position.z)).toBeGreaterThan(0)
-    expect(b.position.z).toBe(0)
-    expect(Math.abs(a.position.z)).toBeCloseTo(
-      Math.abs(layerOffset(0, 10, LAYER_GAP, peelLocal(0.3, 0))),
-      12,
-    )
+    applyLayerTransform(inner, TEARDOWN_LAYERS[5]!, 0.3, LAYER_GAP, 1)
+    expect(a.position.z).toBeGreaterThan(0)
+    expect(b.position.z).toBeLessThan(0)
+    expect(a.position.z).toBeCloseTo(-b.position.z, 12)
+    expect(Math.abs(inner.position.z)).toBeLessThan(Math.abs(b.position.z))
+    expect(a.position.z).toBeCloseTo(layerOffset(0, 10, LAYER_GAP, peelLocal(0.3, 0)), 12)
   })
 
   it('is deterministic and reversible from the same inputs', () => {

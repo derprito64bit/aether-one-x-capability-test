@@ -68,6 +68,26 @@ export function Film() {
   const [contextLost, setContextLost] = useState(false)
   const showFallback = !canRender || contextLost || reducedMotion
 
+  // Render the film only while it can be seen: the runway intersects the
+  // viewport and the tab is visible. A boolean that flips at most twice per
+  // visit (never a scroll value), so it is fine as React state.
+  const [onScreen, setOnScreen] = useState(true)
+  const [tabVisible, setTabVisible] = useState(() => document.visibilityState !== 'hidden')
+  useEffect(() => {
+    const el = runway.current
+    if (el === null || showFallback) return
+    const io = new IntersectionObserver((entries) => {
+      for (const entry of entries) setOnScreen(entry.isIntersecting)
+    })
+    io.observe(el)
+    const onVisibility = (): void => setTabVisible(document.visibilityState !== 'hidden')
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      io.disconnect()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [showFallback])
+
   // Pointer parallax for fine pointers only. MotionValues, never state.
   useEffect(() => {
     const el = stage.current
@@ -101,11 +121,7 @@ export function Film() {
 
   if (showFallback) {
     return (
-      <section
-        aria-label="Aether One X story"
-        className="mx-auto max-w-6xl px-4 py-16"
-        data-testid="film-fallback"
-      >
+      <section aria-label="Aether One X story" className="page py-16" data-testid="film-fallback">
         <h1 className="sr-only">Aether One X: power, without the noise.</h1>
         {CHAPTERS.map((chapter) =>
           chapter.act === 'teardown' ? (
@@ -115,8 +131,8 @@ export function Film() {
               <article aria-label="Act teardown" className="grid gap-6 py-12 md:grid-cols-2">
                 <div>
                   <p className="kicker">{chapter.kicker}</p>
-                  <h2 className="spec-num mt-3 text-4xl">{chapter.headline}</h2>
-                  <p className="mt-3 text-(--color-dim)">{chapter.body}</p>
+                  <h2 className="display-lg mt-3">{chapter.headline}</h2>
+                  <p className="lede mt-4">{chapter.body}</p>
                 </div>
               </article>
               {TEARDOWN_COPY.map((layer, i) => (
@@ -127,8 +143,8 @@ export function Film() {
                 >
                   <div>
                     <p className="kicker">{layer.kicker}</p>
-                    <h2 className="spec-num mt-3 text-4xl">{layer.headline}</h2>
-                    <p className="mt-3 text-(--color-dim)">{layer.body}</p>
+                    <h2 className="display-lg mt-3">{layer.headline}</h2>
+                    <p className="lede mt-4">{layer.body}</p>
                     <p className="spec-tech mt-3">{layer.figure}</p>
                   </div>
                   <div className="flex justify-center">
@@ -148,8 +164,8 @@ export function Film() {
             >
               <div>
                 <p className="kicker">{chapter.kicker}</p>
-                <h2 className="spec-num mt-3 text-4xl">{chapter.headline}</h2>
-                <p className="mt-3 text-(--color-dim)">{chapter.body}</p>
+                <h2 className="display-lg mt-3">{chapter.headline}</h2>
+                <p className="lede mt-4">{chapter.body}</p>
               </div>
               <div className="flex justify-center">
                 <PhoneFrame
@@ -198,6 +214,7 @@ export function Film() {
             parallaxX={parallaxX}
             parallaxY={parallaxY}
             onContextLost={() => setContextLost(true)}
+            active={onScreen && tabVisible}
           />
         </Suspense>
         <FilmOverlay progress={progress} runway={runway} />

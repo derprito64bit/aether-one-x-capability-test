@@ -10,12 +10,30 @@ export const BEZEL = 0.00145
 /** Thin dark bezel between the glass edge and the lit display (1.6mm actual). */
 export const DISPLAY_INSET = 0.0016
 
-/** Rear ceramic panel stack. */
-export const BACK_PANEL = { depth: 0.0028, z: -0.00251 } as const
+/**
+ * Rear ceramic panel: 0.8mm, outer face on CERAMIC_FACE_Z, inner face on
+ * the internals manifest's BACK_INNER_Z (-3.11mm, layout.ts). It was 2.8mm
+ * thick (inner face -1.11mm), so every rear internal sat inside it.
+ */
+export const BACK_PANEL = {
+  depth: 0.0008,
+  z: -0.00351,
+  bevel: 0.0003, // under half the depth, or the extrusion overruns it
+  halfW: 0.03695,
+  halfH: 0.07835,
+} as const
 export const BACK_FACE = -DIM.t / 2
-/** Front glass plus the emissive display panel stacked inside it. */
+/**
+ * Front stack, front to back: cover glass (front face 0.15mm under the
+ * frame lid), bezel ink printed on its underside, then the display panel
+ * behind both. The panel used to sit 0.45mm inside the glass slab.
+ */
 export const FRONT_GLASS = { depth: 0.0015, z: 0.003 } as const
-export const DISPLAY_PANEL = { depth: 0.0011, z: 0.00215 } as const
+/** Cover glass outer face: front details (earpiece, punch-hole) seat on it. */
+export const GLASS_FRONT_Z = FRONT_GLASS.z + FRONT_GLASS.depth / 2
+/** Cover glass underside. */
+export const GLASS_BACK_Z = FRONT_GLASS.z - FRONT_GLASS.depth / 2
+export const DISPLAY_PANEL = { depth: 0.0006, z: GLASS_BACK_Z - 0.00004 - 0.0003 } as const
 
 /** Front frame split: solid rear body plus a perimeter bezel ring. */
 export const FRAME_BODY_DEPTH = 0.0042 // body zone; slab depth derives from planes
@@ -54,14 +72,22 @@ export const GLASS_SEAL = { rOut: 0.01915, rIn: 0.0188, depth: 0.00006 } as cons
 export const LENS_RING_R = 0.0102
 /**
  * Round lens specs, polar placement. Per-lens barrel depths are physical:
- * ultra shallow (1.0mm), main (1.6mm), mid-tele deepest (2.1mm).
+ * ultra shallow (1.0mm), main (1.6mm), mid-tele deepest (1.75mm). Barrels
+ * open 0.1mm under the collar-top plane (1.8mm above the ceramic face) and
+ * must bottom out in front of the ceramic: the old 2.1mm mid barrel put
+ * its sensor 0.3mm inside the rear panel, where it never rendered.
  * coatHue drives per-lens AR coating tint in radians.
  */
 export const LENSES = [
   { key: 'main', angleDeg: 90, r: 0.006, barrelDepth: 0.0016, coatHue: 2.1 },
   { key: 'ultra', angleDeg: 210, r: 0.0049, barrelDepth: 0.001, coatHue: 4.6 },
-  { key: 'mid', angleDeg: 330, r: 0.0049, barrelDepth: 0.0021, coatHue: 0.3 },
+  { key: 'mid', angleDeg: 330, r: 0.0049, barrelDepth: 0.00175, coatHue: 0.3 },
 ] as const
+/**
+ * Lens turret collar: tapers from r + base at the cover glass to r + top at
+ * the collar top, which stands `proud` above the module top plane.
+ */
+export const LENS_COLLAR = { base: 0.0012, top: 0.0009, proud: 0.00035 } as const
 /** Periscope window: a rounded rectangle, folded optic below the triangle. */
 export const PERISCOPE = {
   x: 0,
@@ -73,8 +99,13 @@ export const PERISCOPE = {
   h: 0.0055,
   r: 0.0022,
   recess: 0.0004,
-  prismAngleDeg: 40, // interior face angle, so you cannot see straight down
-  cavityDepth: 0.0026,
+  // Prism face tilt cap. The cavity under the window is only as deep as
+  // the window's rise above the ceramic face (~0.9mm), so the face spans
+  // the cavity diagonal at the steepest tilt that fits, capped here; the
+  // old fixed 40-degree, 8.8mm plane ran 4.6mm deep, through the window
+  // and cavity walls and into the body.
+  prismAngleDeg: 40,
+  wall: 0.0004, // cavity wall thickness, centered on the window edge
 } as const
 /** Flash as an arc segment cut into the step ring, not a satellite circle. */
 export const FLASH_ARC = {
@@ -98,15 +129,20 @@ export const TOF = {
 /** Medallion: polished metal inlay bonded under the cover glass. */
 export const MEDALLION = {
   r: 0.0034,
-  z: -0.00012, // 0.12mm below the glass outer face
+  // 0.12mm inboard of the glass (rear is -z, so under the glass is +z).
+  // It was -0.00012, which stood the inlay 0.04-0.12mm proud of the glass.
+  z: 0.00012,
   thickness: 0.00008,
   ringWidth: 0.00008,
 } as const
-/** Display bezel: fine matte ink layer printed on the glass underside. */
+/**
+ * Display bezel: fine matte ink layer printed on the glass underside,
+ * 0.02mm under the glass and 0.02mm over the panel (never coplanar).
+ */
 export const BEZEL_SURFACE = {
   color: '#07080b',
   roughness: 0.84,
-  z: 0.0026,
+  z: GLASS_BACK_Z - 0.00002,
   feather: 0.00012,
 } as const
 /** Optional two-material rear panel. Only some finishes get it. */
@@ -121,19 +157,26 @@ export const OPTICS_PARTNER = 'NOVEK' as const
 /** Module top plane: every lens builds outward from here. */
 export const MODULE_FACE_Z = CERAMIC_FACE_Z - MODULE.proud
 
-/** Bottom-edge hardware. */
-export const GRILLE_SLOT = { w: 0.00055, h: 0.0003, depth: 0.0012 } as const
 /**
- * USB-C receptacle. A true boolean hole is out of reach procedurally, so
- * the cavity reads through a chamfered mouth rim, a dark self-shadowing
- * interior set inside the edge line, and a centred tongue with contacts.
+ * Bottom-edge hardware. Grille slots: w along x, h across the thickness
+ * (z), sunk `depth` into the wall with the open face a hair proud of it.
+ */
+export const GRILLE_SLOT = { w: 0.00055, h: 0.0012, depth: 0.0003 } as const
+/**
+ * USB-C receptacle on the bottom face (normal -y): 8.4mm along x by 2.6mm
+ * across the thickness (z). A true boolean hole is out of reach
+ * procedurally and the frame is opaque, so the mouth is layered plates a
+ * few hundredths proud of the wall: chamfered rim, dark opening, centred
+ * tongue (6.4 x 0.7mm), contact glint. They used to be built with y and z
+ * swapped, so the rim stood 1.7mm out of the edge and the opening read
+ * 4.2mm tall.
  */
 export const PORT = {
   w: 0.0084,
   h: 0.0026,
   r: 0.0013,
-  cavityDepth: 0.0042,
-  tongue: { w: 0.0064, h: 0.0007, depth: 0.0032 },
+  rim: 0.0002,
+  tongue: { w: 0.0064, h: 0.0007 },
 } as const
 /** Six speaker slots marching right of the port, instanced. */
 export const SPEAKER_XS = [0.0082, 0.0106, 0.013, 0.0154, 0.0178, 0.0202] as const
@@ -145,10 +188,18 @@ export const MIC_R = 0.00042
 export const SX = DIM.w / 2
 export const SY = DIM.h / 2
 
-/** Antenna interruption bands: 1.4mm wide, inset 0.05mm, finish-matched. */
-export const ANTENNA_BAND = { w: 0.0014, inset: 0.00005, depth: 0.004 } as const
-/** Buttons sit in machined pockets: 0.2mm recess, 0.1mm gap, 0.4mm proud. */
-export const BUTTON_POCKET = { recess: 0.0002, gap: 0.0001, proud: 0.0004 } as const
+/**
+ * Antenna interruption bands: 1.4mm wide across the rail flat, finish-
+ * matched. Flush (0.02mm proud): the rail is an opaque solid, so the old
+ * 0.05mm-recessed band rendered inside it and never showed.
+ */
+export const ANTENNA_BAND = { w: 0.0014, proud: 0.00002, zMin: -0.0032, zMax: 0.0034 } as const
+/**
+ * Buttons: pill caps centered on the rail, 1.4mm across, 0.4mm proud, in a
+ * dark 0.1mm gap line with a polished chamfer ring. The rail is solid, so
+ * the pocket reads as a flush dark outline rather than a cut recess.
+ */
+export const BUTTON_POCKET = { gap: 0.0001, proud: 0.0004, thickness: 0.0014 } as const
 /** Front sensors: 3.2mm punch-hole with 0.15mm dark ring, earpiece slot. */
 export const PUNCH = { r: 0.0016, ring: 0.00015, y: 0.0728 } as const
 export const EARPIECE = { w: 0.012, h: 0.0006, y: 0.0772 } as const

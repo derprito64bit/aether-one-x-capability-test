@@ -1,68 +1,68 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { FocalStrip } from '../components/CameraStrip/FocalStrip.tsx'
+import { LensSystem } from '../components/CameraStrip/LensSystem.tsx'
 import { Head } from '../components/head/Head.tsx'
 import { CtaBand } from '../components/layout/CtaBand.tsx'
 import { PageHero } from '../components/layout/PageHero.tsx'
-import { FocalStrip } from '../components/CameraStrip/FocalStrip.tsx'
-import { PhoneConfigProvider } from '../components/PhoneViewer/PhoneConfig.tsx'
+import { PhoneConfigProvider, usePhoneConfig } from '../components/PhoneViewer/PhoneConfig.tsx'
 import { PhoneViewer } from '../components/PhoneViewer/PhoneViewer.tsx'
-import { CAMERA_LENSES, FOCAL_LENGTHS } from '../data/product.ts'
+import { StudioStage } from '../components/ui/StudioStage.tsx'
+import { Reveal } from '../components/ui/Reveal.tsx'
 
-/** Cameras page: focal strip, scene viewer, rear 3D study, lens legend. */
+/**
+ * The camera study opens in Titanium: on near-black Obsidian the module's
+ * collar and lens rings disappear into the body.
+ */
+function StudyFinish() {
+  const { setFinish } = usePhoneConfig()
+  useEffect(() => setFinish('titanium'), [setFinish])
+  return null
+}
+
+/** Cameras page: rear 3D study, the zoom viewfinder, the lens system. */
 export function CamerasPage() {
   const [zoom, setZoom] = useState('1x')
-  const scene = FOCAL_LENGTHS.find((f) => f.zoom === zoom) ?? FOCAL_LENGTHS[1]
   return (
     <>
       <Head
         title="Cameras — Aether One X"
         description="Fictional quad camera. Five focal lengths."
         path="/cameras"
-        image="/og/cameras.svg"
-      />
-      <PageHero
-        kicker="Cameras"
-        title="Every focal length."
-        lede="Main 23mm, ultra-wide 14mm, mid 50mm, and a 135mm folded periscope. Demonstration values throughout."
+        image="/og/cameras.png"
       />
       <PhoneConfigProvider>
-        <FocalStrip onZoom={setZoom} />
-        <section aria-label="Focal scene" className="mx-auto max-w-6xl px-4">
-          {scene !== undefined ? (
-            <figure>
-              <img
-                src={scene.image}
-                alt={`${scene.zoom} sample scene, ${scene.note}`}
-                data-testid="focal-scene"
-                className="w-full rounded-2xl border border-(--color-border-hairline)"
-                loading="lazy"
-              />
-              <figcaption className="spec-tech mt-2">
-                {scene.zoom} · {scene.note} · procedural sample
-              </figcaption>
-            </figure>
-          ) : null}
+        <StudyFinish />
+        <PageHero
+          kicker="Cameras"
+          title="Every focal length."
+          lede="Ultra-wide 14 mm, main 23 mm, mid 50 mm and a 135 mm folded periscope, all inside one circular module."
+        >
+          <StudioStage>
+            <PhoneViewer
+              pose="rear"
+              label="Aether One X rear camera study"
+              sharedConfig
+              className="flex h-[420px] items-center justify-center md:h-[560px]"
+              canvasClassName="h-[420px] w-full md:h-[560px]"
+            />
+          </StudioStage>
+        </PageHero>
+        <section aria-labelledby="zoom-heading" className="page pt-24">
+          <Reveal>
+            <h2 id="zoom-heading" className="display-lg max-w-3xl">
+              From the whole bay to the lamp room.
+            </h2>
+            <p className="lede mt-4">
+              Tap a zoom stop. Each one is the real crop of its lens, and the model above brings the
+              matching lens into focus.
+            </p>
+          </Reveal>
+          <div className="mt-10">
+            <FocalStrip zoom={zoom} onZoom={setZoom} />
+          </div>
         </section>
-        <PhoneViewer pose="rear" label="Aether One X rear camera study" sharedConfig />
       </PhoneConfigProvider>
-      <section aria-label="Lens legend" className="mx-auto max-w-6xl px-4 py-12">
-        <h2 className="kicker">Lens legend</h2>
-        <dl className="mt-4 grid gap-4 md:grid-cols-2">
-          {CAMERA_LENSES.map((lens) => (
-            <div
-              key={lens.id}
-              className="rounded-2xl border border-(--color-border-hairline) bg-(--color-surface) p-5"
-            >
-              <dt className="spec-num text-2xl">
-                {lens.label} <span className="spec-unit">{lens.zoom}</span>
-              </dt>
-              <dd className="mt-2 text-sm text-(--color-dim)">{lens.detail}</dd>
-              <dd className="spec-tech mt-2">
-                {lens.sensor} · {lens.aperture} · {lens.stabilization}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      <LensSystem />
       <CtaBand />
     </>
   )

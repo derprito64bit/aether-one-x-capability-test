@@ -31,27 +31,33 @@ chip markings are invented codes.
 - **Grain direction (Prompt A 8.4):** the frame extrusion is split into
   four rail groups by face-centroid sector (`assignRailGroups`), carrying
   four material instances with alternating `anisotropyRotation`.
-- Antenna bands are real geometry: 1.4mm wide, outer face 0.05mm below the
-  rail, coloured per finish from `antennaColor`.
+- Antenna bands are real geometry: 1.4mm wide across the rail flat, flush
+  (0.02mm proud; the rail is an opaque solid, so a recessed band never
+  rendered), coloured per finish from `antennaColor`, never across a key.
 - Panel gaps are recessed dark hairlines, 0.12mm at frame-to-back.
 
 ## Camera module (Prompt A2)
 
-- Centred at (0, 45.8mm), 47mm outer, 1.9mm proud, G1 base fillet into the
-  rear panel (lathe profile, not a flat chamfer).
+- Centred at (0, 45.8mm), 47mm outer, 1.9mm proud, concave G1 base fillet
+  (0.7mm) flaring into the rear panel (lathe profile, not a flat chamfer),
+  knurled collar wall above it. Stepped bowl: collar top 1.9mm, step
+  1.2mm, cover glass 0.8mm; riser and bore walls face the bowl.
 - Two collar steps: knurled outer wall (192 instanced teeth, LOD0; baked
   normal/roughness wall at LOD1), polished top face carrying the etched
   NOVEK arc text (roughness domain, 2048 annular map, mipmapped +
   anisotropic), matte bead-blasted step, dark seal groove, domed cover
   glass with per-optic micro-text.
 - Three round lenses on a triangle (apex up): main 12.0mm/1.6mm deep,
-  ultra 9.8mm/1.0mm, mid 9.8mm/2.1mm — depths differ physically and read
-  with flat lighting. Seven-layer tunnels: dome, collar, gradient barrel,
+  ultra 9.8mm/1.0mm, mid 9.8mm/1.75mm — depths differ physically and read
+  with flat lighting. Each lens is a turret standing on the cover glass
+  (which is cut around it), collar top 0.35mm above the module top;
+  barrels bottom out ahead of the ceramic (2.1mm put the mid sensor
+  inside the rear panel). Seven-layer tunnels: dome, collar, gradient barrel,
   two baffles at 35/70% depth, element at per-lens depth, aperture hint,
   sensor. Per-lens AR hues (green / magenta / neutral).
-- Periscope: rounded-rect window below the triangle, angled prism floor
-  (no straight-down view, one fast highlight), dark ramped open-wall
-  cavity. Flash: two dies on a frosted arc in the step ring. ToF: separate
+- Periscope: rounded-rect window below the triangle, angled prism face
+  across the cavity diagonal (no straight-down view, one fast highlight),
+  dark open-wall cavity from the window down to the ceramic face. Flash: two dies on a frosted arc in the step ring. ToF: separate
   emitter/receiver under one IR-pass window (near-black, polished mirror,
   red-violet grazing sheen, barely-visible internals). 0.7mm module mic.
 - Iris medallion: six-blade straight-edged geometry + hairline ring,
@@ -63,13 +69,16 @@ chip markings are invented codes.
 
 ## Edges and front
 
-- USB-C: chamfered mouth rim, dark self-shadowing cavity, centred tongue
-  with a contact glint strip. Six instanced speaker slots right of port,
+- USB-C: chamfered mouth rim, dark mouth, centred tongue with a contact
+  glint strip, layered a few hundredths proud of the bottom wall (8.4mm
+  along x by 2.6mm across the thickness). Six instanced speaker slots right of port,
   single mic left at a different diameter; top rail mic plus slot,
   asymmetric throughout.
-- Buttons in machined pockets (0.2mm recess, 0.1mm gap): 32mm rocker,
-  14mm power key with horizontal grooves the rocker lacks.
-- SIM tray flush 0.1mm below the rail with parting plate and eject pinhole.
+- Buttons: pill caps 0.4mm proud, centred on the rail, in a dark 0.1mm gap
+  line with a polished chamfer ring: 32mm rocker, 14mm power key with
+  grooves on its face the rocker lacks.
+- SIM tray flush with the rail inside a dark parting line, eject pinhole
+  beside it.
 - Front: superellipse glass/display/bezel sharing the body exponent;
   12mm earpiece slot, 3.2mm punch-hole well with glass-thickness edge and
   internal glint. Bezel is matte ink UNDER the glass (roughness + feathered
@@ -93,10 +102,15 @@ lifting lids, 18-turn instanced litz coil + lead-out + 16-LED ring, NFC,
 vapour chamber, graphite, haptic with flex tail, speaker, earpiece, port
 block, coax runs, 8 spinning Torx screws, SoC package (substrate, 14×14
 BGA, marked die, floorplan, decoupling ring). Battery 4000 mAh (cell
-volume 19cm³ ≈ 800 Wh/L Si-C — data and hardware agree, tested).
+volume 17.4cm³ ≈ 875 Wh/L Si-C — data and hardware agree, tested).
+Internal z stack follows the teardown order so no layer passes through
+another anywhere in the teardown (`layerStack.test.tsx` sweeps it); the
+exceptions are the solid midframe body and the camera housings, which
+mount through the board, silicon, and spreaders under the module.
 Choreography: removal-order delays + per-layer radial blends + weight
 damping; teardown mode lays layers flat in a sandwich stack with a
-top-down peel and a lens-up camera module (see `docs/teardown.md`).
+outside-in peel and a camera module that slides out and turns lens-up
+in its own beat (see `docs/teardown.md`).
 
 ## Lighting and color
 
@@ -140,7 +154,7 @@ top-down peel and a lens-up camera module (see `docs/teardown.md`).
 5. Text material — **pass** (roughness domain; darkens at grazing).
 6. Two type scales — **pass** (collar arc + per-optic micro-text, two
    surfaces/depths).
-7. Lens depth differentiation — **pass** (1.0 / 1.6 / 2.1mm barrels +
+7. Lens depth differentiation — **pass** (1.0 / 1.6 / 1.75mm barrels +
    scaled baffles; asserted in geometry, visible in macro).
 8. Knurl silhouette — **pass** (192 teeth, 0.18mm proud; Blender macro
    confirms teeth break the outline).
@@ -148,7 +162,7 @@ top-down peel and a lens-up camera module (see `docs/teardown.md`).
    viewport; no pop mechanism). Visual pull-through pending a freerun.
 10. ToF two apertures — **pass** (2.1 vs 2.6mm + square sensor edge).
 11. ToF black-not-flat — **pass** (clearcoat mirror + red-violet sheen).
-12. Periscope folded read — **pass** (40° prism, open-wall cavity, fast
+12. Periscope folded read — **pass** (prism face across the cavity, capped at 40°, open-wall cavity, fast
     highlight; no straight-down view).
 13. Bezel not a void — **pass** (ink under glass, grain, feathered edge).
 14. Punch-hole depth — **pass** (well + glass edge + glint).

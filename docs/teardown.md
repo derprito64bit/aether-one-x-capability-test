@@ -6,8 +6,8 @@ After: `docs/film-snaps/act-teardown-*.png` (stack + ten layers).
 
 Sandwich rewrite (user direction, 2026-09-24): the flip-to-face beats are
 gone — every layer rides its slot, the camera tours the open stack. The
-only rotation left is the camera module parking lens-up as it peels, so
-its decorated face meets the tour camera.
+only rotation left is the camera layer turning lens-up during its own
+beat, out beside the stack, so its decorated face meets the tour camera.
 
 ## How it works
 
@@ -15,16 +15,42 @@ its decorated face meets the tour camera.
   Prompt C part IDs (coverage asserted: every registry part exactly once).
 - `layerCursor` 0–10 continuous float drives copy, accent, pointer, and
   the aim track; pure function of progress, reverses exactly.
-- Top-down peel: each layer's slot offset is its own staggered function
-  of the shared separation (`peelLocal`: glass lifts first, rear panel
-  lands last, all arrive by sep 1). No detach travel, no flip, no scale
-  bump. Weight damping (heavy 2.2, medium 4, light 5.5/s), screw spin as
-  `explode × 2π`. Flicks snap past 10mm/frame instead of lag-flinging.
+- Outside-in peel: each layer's slot offset is its own staggered function
+  of the shared separation (`peelLocal`: both faces lead, cover glass and
+  rear panel together, each half follows from the outside in, the middle
+  pair lands at sep 1). Slots run in physical order, front layers toward
+  +z (screen-up in the flat lay): glass on top, rear panel at the bottom.
+  Outside-in means every gap only widens, so no layer passes through
+  another at any separation (front-first ordering drove the inner rear
+  layers through the rear panel; an inverted sign once sent the glass
+  down through every layer). `layerStack.test.tsx` drives the real shell
+  and internals drivers through the whole teardown span every 0.0005 of
+  progress, snapped and damped at scroll speed, forward and reverse, with
+  the film's lifts, and fails on any cross-layer interpenetration. Two
+  pose-gated exceptions only: the solid midframe body holds the internal
+  parts until the stack is over half open, and the camera housings mount
+  through the main board, silicon, and spreaders under the module until
+  it starts to open. No detach travel, no flip, no scale bump.
+- One motion for every layer: the director damps a single pair of
+  teardown scalars (separation, cursor) once per frame
+  (`dampTeardownScalars`), and every layer, shell and internal, sits
+  exactly on its goal for those values. Per-layer weight damping is gone:
+  each group lagged at its own rate and snapped on its own, which inverted
+  neighbours mid-peel. Weight now reads through the outside-in order only.
+  The director's frame runs first (useFrame priority -1), so Internals
+  reads this frame's control plane. Screw spin is `explode × 2π` about
+  each screw's own axis. Act lifts (die, shield lids) join the layer
+  goal, scaled by the layer's own peel.
   Reduced motion needs no special path: the motion is positional only,
   and the static fallback serves the full reduce preference anyway.
-- Camera module parks lens-up (π about the module center, driven by its
-  own peel) so the collar and lenses face the tour camera instead of
-  showing the housing back.
+- The shell camera module rides bonded to the rear panel through the
+  peel. In the camera beat (in over cursor 8.0-8.45, out over 8.55-9.0,
+  the pointer on the same window) the camera layer slides 76mm out beside
+  the stack, the module rises to its housings, and the assembly
+  turns lens-up (π about the module center) toward the tour camera: three
+  phases, never together, so the turn happens clear of the stack. The
+  aim follows the slide; the pointer anchors on the part's bounds, not
+  its group origin.
 - The tour camera drifts toward the spotlight layer's slot (half-gain aim
   track at lookAt) while the stack never moves for the camera.
 - Feature accent on the rim light + per-layer copy with accent figure
@@ -84,8 +110,9 @@ its decorated face meets the tour camera.
    polish, not a fail.
 7. **Gap persists — pass.** Stack offsets apply every frame; featured
    slot stays open by construction.
-8. **Weight reads — pass on implementation.** Damps, distances, screw
-   spin, still battery all in; blind timing test would be nice-to-have.
+8. **Weight reads — partial (round 04).** Per-layer weight damping was
+   removed (it inverted neighbours); weight reads through the outside-in
+   peel order, screw spin, and the still battery only.
 9. **Stage progression — pass.** `stageColors` ramps 0.25–0.52; stack vs
    rear-panel stills differ obviously.
 10. **Product neutral — pass.** Stage carries colour; materials untouched

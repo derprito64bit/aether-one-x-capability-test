@@ -1,4 +1,9 @@
-import { Color, MeshPhysicalMaterial, type MeshPhysicalMaterialParameters } from 'three'
+import {
+  Color,
+  MeshPhysicalMaterial,
+  RepeatWrapping,
+  type MeshPhysicalMaterialParameters,
+} from 'three'
 import { FINISH_PARAMS, type FinishParams } from './phoneFinishes.ts'
 import { COLLAR, OPTICS_PARTNER } from './phoneDimensions.ts'
 import {
@@ -183,6 +188,21 @@ export const RAIL_KEYS = [
   'frameNY',
 ] as const satisfies ReadonlyArray<keyof PhoneMaterialSet>
 
+/**
+ * Cover-glass opacity with the display lit in the film: the director lerps
+ * from 1 (screen off, dark mirror) to this as the screen powers on.
+ */
+export const GLASS_SCREEN_ON_OPACITY = 0.42
+/**
+ * Product-page viewers rest with the screen on: a lighter glass veil and a
+ * slightly hot panel so the cobalt wallpaper reads luminous through the
+ * dark cover glass. At the old opaque default the viewers showed a black
+ * slab with only a light's highlight in it (and the panel sampled one
+ * corner texel; see roundedRectSlabGeometry).
+ */
+const VIEWER_GLASS_OPACITY = 0.22
+const VIEWER_SCREEN_EMISSIVE = 1.1
+
 function makeMaterial(overrides: MeshPhysicalMaterialParameters): MeshPhysicalMaterial {
   // Transparent from birth (Prompt A section 1): the x-ray opacity dissolve
   // must never trigger a mid-film shader recompile. Opacity stays 1 until
@@ -201,6 +221,15 @@ export function createPhoneMaterials(params: FinishParams): PhoneMaterialSet {
   // Groove period follows the finish: slate's heavy grain reads near 0.08mm,
   // obsidian's faint grain near 0.13mm.
   brush.repeat.setScalar(90 + params.grainAmplitude * 80)
+  // Ceramic mottle tiles: the back panel's UVs are 0..1 over the panel, so
+  // 8 x 16 tiles keep a texel near 0.07mm and the etch sparkle subpixel
+  // until macro, as specified. Stretched once over the panel, each sparkle
+  // texel read as a 0.6mm white fleck.
+  for (const map of [ceramic.color, ceramic.data]) {
+    map.wrapS = RepeatWrapping
+    map.wrapT = RepeatWrapping
+    map.repeat.set(8, 16)
+  }
 
   const makeRail = (anisotropyRotation: number): MeshPhysicalMaterial =>
     makeMaterial({
@@ -265,6 +294,7 @@ export function createPhoneMaterials(params: FinishParams): PhoneMaterialSet {
     // white and read as a second phone overlapping the first. The arrival
     // sweep still plays through the directional key, not the env map.
     envMapIntensity: 0.55,
+    opacity: VIEWER_GLASS_OPACITY,
   })
   const display = makeMaterial({
     color: new Color('#02040a'),
@@ -623,9 +653,12 @@ export function createPhoneMaterials(params: FinishParams): PhoneMaterialSet {
   })
 
   display.emissiveMap = createScreenTexture()
-  display.emissiveIntensity = 0.9
+  // Viewer rest level: the wallpaper reads through the 0.42 cover glass,
+  // so the panel runs a little hot to land the cobalt luminous, not navy.
+  // The film director writes its own per-act level every frame.
+  display.emissiveIntensity = VIEWER_SCREEN_EMISSIVE
 
-  return {
+  const set: PhoneMaterialSet = {
     framePX,
     frameNX,
     framePY,
@@ -675,6 +708,9 @@ export function createPhoneMaterials(params: FinishParams): PhoneMaterialSet {
     panelSeam,
     flashGlass,
   }
+  // Named by registry key so live scene probes can identify every part.
+  for (const k of MATERIAL_KEYS) set[k].name = k
+  return set
 }
 
 /** Creates the owned default material set with a static display texture. */
@@ -682,7 +718,7 @@ export function createDefaultMaterials(): PhoneMaterialSet {
   const set = createPhoneMaterials(FINISH_PARAMS.obsidian)
   const previous = set.display.emissiveMap
   set.display.emissiveMap = createScreenTexture()
-  set.display.emissiveIntensity = 0.9
+  set.display.emissiveIntensity = VIEWER_SCREEN_EMISSIVE
   if (previous !== null) previous.dispose()
   return set
 }
