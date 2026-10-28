@@ -69,6 +69,10 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
   const fillLight = useRef<THREE.DirectionalLight | null>(null)
   const rimLight = useRef<THREE.DirectionalLight | null>(null)
   const accentLight = useRef<THREE.DirectionalLight | null>(null)
+  const ambientLight = useRef<THREE.AmbientLight | null>(null)
+  const roomKey = useRef<THREE.DirectionalLight | null>(null)
+  const roomRimL = useRef<THREE.DirectionalLight | null>(null)
+  const roomRimR = useRef<THREE.DirectionalLight | null>(null)
   const internalsControl = useRef<InternalsControl>({
     opacity: 0,
     explode: 0,
@@ -91,10 +95,12 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
     reducedMotion: false,
   })
   const opticsSeparation = useRef<Record<string, THREE.Group | null>>({})
-  // TEMP-DEBUG diagnosis hook. Removed before merge.
+  // Dev-only probe hook (scripts/probe.mjs and live console probes):
+  // window.__scene and __ray. Compiled out of production builds.
   const debugScene = useThree((state) => state.scene)
   const debugCamera = useThree((state) => state.camera)
   useEffect(() => {
+    if (!import.meta.env.DEV) return
     const w = window as unknown as {
       __scene?: THREE.Scene
       __ray?: (x: number, y: number) => string
@@ -151,6 +157,10 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
       fillLight,
       rimLight,
       accentLight,
+      ambientLight,
+      roomKey,
+      roomRimL,
+      roomRimR,
       opticsSeparation,
       screenMode: screen.modeRef,
       screenBrightness: screen.brightnessRef,
@@ -183,7 +193,14 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
         intensity={0}
         color="#e8f1ff"
       />
-      <ambientLight intensity={0.35} color="#dfe8ff" />
+      <ambientLight ref={ambientLight} intensity={0.35} color="#dfe8ff" />
+      {/* Section-scene room lights (round 06): camera-relative key and two
+          rims, aimed and coloured by the director per room. Always in the
+          scene at intensity 0 when unused, so the light count (and every
+          compiled program) never changes mid-film. */}
+      <directionalLight ref={roomKey} intensity={0} color="#ffffff" />
+      <directionalLight ref={roomRimL} intensity={0} color="#ffffff" />
+      <directionalLight ref={roomRimR} intensity={0} color="#ffffff" />
       <StudioEnvironment />
       <Stage progress={progress} />
       <group ref={hero}>

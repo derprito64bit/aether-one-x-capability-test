@@ -1,12 +1,12 @@
 import { motion } from 'motion/react'
-import type { ReactNode } from 'react'
+import { ScrambleText } from '../../components/ScrambleText.tsx'
 import { ITEM } from './motion.ts'
 
-/** Topic label opening each chapter, in the one accent. */
-export function Kicker({ children }: { children: ReactNode }) {
+/** Topic label opening each chapter, in the one accent; decodes on entry. */
+export function Kicker({ children }: { children: string }) {
   return (
     <motion.p className="kicker text-(--color-aether-strong)" variants={ITEM}>
-      {children}
+      <ScrambleText text={children} />
     </motion.p>
   )
 }

@@ -509,3 +509,73 @@ export const TEARDOWN_INTRO_STATS: TeardownStat[] = [
   { value: String(DIMENSIONS.thicknessMm), unit: 'mm', label: 'All ten, stacked' },
   { value: String(TEARDOWN_FACTS.screws), unit: 'screws', label: 'One driver opens it' },
 ]
+
+/** One giant figure a section's room projects behind the phone. */
+export interface SceneFigure {
+  value: string
+  unit: string
+}
+
+/**
+ * What each section's room puts on its back wall (backdrop scenes): giant
+ * code-set figures, shown one after another across the act, and a caption
+ * line. Decorative (the copy column carries the same facts for assistive
+ * tech); every figure comes from src/data (tested).
+ */
+export interface SceneBoard {
+  figures: SceneFigure[]
+  caption: string
+  /**
+   * False when the act's subject fills a phone's whole frame (no wall
+   * left for the figure): the copy column then keeps its numeral there.
+   */
+  onPhones?: boolean
+}
+
+/** 2^(3 x bits) colours, in billions: 10-bit panels show 1.07 billion. */
+const COLOURS_B = (2 ** (3 * DISPLAY.colorBits) / 1e9).toFixed(2)
+
+export const SCENE_BOARDS: Partial<Record<ActId, SceneBoard>> = {
+  settle: {
+    figures: [{ value: 'Ti-6Al-4V', unit: '' }],
+    caption: `${FRAME_MATERIAL} · ${DIMENSIONS.thicknessMm} mm · ${DIMENSIONS.weightG} g`,
+  },
+  approach: {
+    figures: [{ value: String(DIMENSIONS.bezelsMm), unit: 'mm' }],
+    caption: 'Symmetrical bezels on all four sides',
+  },
+  camera: {
+    figures: [{ value: String(MAIN?.mp ?? 50), unit: 'MP' }],
+    caption: `${MAIN?.sensor ?? '1/1.3 in'} sensor · ${MAIN?.aperture ?? 'f/1.6'} · 14 / 23 / 50 / 135 mm`,
+  },
+  display: {
+    figures: [
+      { value: String(DISPLAY.refreshMax), unit: 'Hz' },
+      { value: `${COLOURS_B}B`, unit: 'colours' },
+      { value: formatNumber(DISPLAY.peakNits), unit: 'nits' },
+    ],
+    caption: `${DISPLAY.size} LTPO OLED · ${DISPLAY.refreshMin} to ${DISPLAY.refreshMax} Hz · ${DISPLAY.colorBits}-bit colour`,
+  },
+  storage: {
+    figures: [{ value: MAX_STORAGE.replace(/\s.*$/, ''), unit: MAX_STORAGE.replace(/^\S+\s/, '') }],
+    caption: `${TEARDOWN_FACTS.storageType} · ${MEMORY.ramGb} GB ${MEMORY.type}`,
+  },
+  battery: {
+    onPhones: false,
+    figures: [{ value: formatNumber(BATTERY.capacity), unit: 'mAh' }],
+    caption: `${BATTERY.wired} W wired · 50% in ${BATTERY.charge50Min} min · ${BATTERY.wireless} W wireless`,
+  },
+  software: {
+    figures: [{ value: '2.0', unit: 'AetherOS' }],
+    caption: 'On-device · offline · private',
+  },
+  ai: {
+    figures: [{ value: String(PERFORMANCE.npu.hero.value), unit: PERFORMANCE.npu.hero.suffix }],
+    caption: 'Neural engine · nothing leaves the phone',
+  },
+}
+
+/** The board an act's room shows, or null for the studio acts. */
+export function figureFor(act: ActId): SceneBoard | null {
+  return SCENE_BOARDS[act] ?? null
+}

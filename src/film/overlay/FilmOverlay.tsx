@@ -2,10 +2,19 @@ import { PauseIcon, PlayIcon } from '../../components/icons.tsx'
 import { motion, useMotionValueEvent, type MotionValue } from 'motion/react'
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { Glass } from '../../components/Glass/Glass.tsx'
-import { CHAPTERS, TEARDOWN_COPY, TEARDOWN_INTRO_STATS, type TeardownStat } from '../chapters.ts'
+import {
+  CHAPTERS,
+  TEARDOWN_COPY,
+  TEARDOWN_INTRO_STATS,
+  figureFor,
+  type TeardownStat,
+} from '../chapters.ts'
 import { inspectHit } from '../inspect.ts'
 import type { ActId } from '../key.ts'
-import { luminance, scrimForStage, stageColors } from '../stage/stageColors.ts'
+import { stageColors } from '../stage/stageColors.ts'
+import { darkWeight, studioWeight } from '../backdrop/scenes.ts'
+import { runScramble } from '../../lib/scramble.ts'
+import { ScrambleText } from '../../components/ScrambleText.tsx'
 import { scrollToProgress } from '../scroll.ts'
 import { TEARDOWN_LAYERS, cursorAt } from '../teardown/layers.ts'
 import { ACTS } from '../timeline.ts'
@@ -17,7 +26,8 @@ import { Headline } from './Headline.tsx'
 import { Kicker } from './Kicker.tsx'
 import { CHAPTER, ITEM } from './motion.ts'
 import { SpecLines } from './SpecLines.tsx'
-import { TOUR_END, TOUR_START, holdTarget, playRate, rawCursor } from './tour.ts'
+import { TOUR_END, TOUR_START, actRestStart, playRate, rawCursor, restTarget } from './tour.ts'
+import { useScrollSettle } from '../../hooks/useScrollSettle.ts'
 import { XrayReadout } from './XrayReadout.tsx'
 
 interface FilmOverlayProps {
@@ -48,11 +58,11 @@ const ACT_LABELS: Record<ActId, string> = {
  */
 const VEIL_STOPS = (dir: string, reach: number): string => {
   const at = (f: number): string => `${(f * reach).toFixed(1)}%`
-  return `linear-gradient(${dir}, rgba(242,240,235,0.8) 0%, rgba(242,240,235,0.7) ${at(0.3)}, rgba(242,240,235,0.48) ${at(0.55)}, rgba(242,240,235,0.22) ${at(0.75)}, rgba(242,240,235,0.07) ${at(0.9)}, rgba(242,240,235,0) ${at(1)})`
+  return `linear-gradient(${dir}, rgb(var(--veil-rgb) / 0.8) 0%, rgb(var(--veil-rgb) / 0.7) ${at(0.3)}, rgb(var(--veil-rgb) / 0.48) ${at(0.55)}, rgb(var(--veil-rgb) / 0.22) ${at(0.75)}, rgb(var(--veil-rgb) / 0.07) ${at(0.9)}, rgb(var(--veil-rgb) / 0) ${at(1)})`
 }
 const VEIL_LEFT = VEIL_STOPS('to right', 50)
 const VEIL_RIGHT = VEIL_STOPS('to left', 50)
-const VEIL_BOTTOM = VEIL_STOPS('to top', 62).replace('0.8)', '0.95)')
+const VEIL_BOTTOM = VEIL_STOPS('to top', 62).replace('/ 0.8)', '/ 0.95)')
 
 /** 0..1 copy-card strength across the camera macro dive (p ~0.63-0.72). */
 function macroCard(p: number): number {
@@ -100,8 +110,8 @@ function StatGrid({
           <dt className="mt-1 text-[11.5px] leading-snug text-(--color-dim) md:mt-1.5 md:text-[12.5px]">
             {stat.label}
           </dt>
-          <dd className="order-first flex items-baseline gap-1 text-[1.2rem] leading-none font-semibold tracking-[-0.03em] text-(--color-ink) tabular-nums md:text-[clamp(1.4rem,1.9vw,1.9rem)]">
-            {stat.value}
+          <dd className="order-first flex items-baseline gap-1 font-mono text-[1.15rem] leading-none font-medium tracking-[-0.05em] text-(--color-ink) tabular-nums md:text-[clamp(1.3rem,1.75vw,1.75rem)]">
+            <ScrambleText auto={false} text={stat.value} />
             {stat.unit !== '' && (
               <span className="text-[0.52em] font-medium tracking-normal text-(--color-dim)">
                 {stat.unit}
@@ -112,6 +122,17 @@ function StatGrid({
       ))}
     </dl>
   )
+}
+
+/**
+ * The copy numeral stands down where the act's room projects the figure:
+ * everywhere, or on desktop only when phones get no figure (see
+ * SceneBoard.onPhones).
+ */
+function numeralQuiet(id: ActId): boolean | 'desktop' {
+  const board = figureFor(id)
+  if (board === null) return false
+  return board.onPhones === false ? 'desktop' : true
 }
 
 /** Progress of the runway's current scroll position (mapped like Film). */
@@ -146,10 +167,18 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
   useEffect(() => {
     let raf = 0
     const last = TEARDOWN_COPY.length - 1
+    // Edge-triggered decode: a card's code-set parts scramble in each time
+    // it turns visible (a time-based UI flourish; the card itself stays a
+    // pure function of progress).
+    const lit = new WeakSet<HTMLElement>()
     const show = (el: HTMLElement, o: number, reveal: number): void => {
       el.style.opacity = o.toFixed(3)
       el.style.visibility = o <= 0.01 ? 'hidden' : 'visible'
       el.style.setProperty('--reveal', reveal.toFixed(3))
+      if (o > 0.5 && !lit.has(el)) {
+        lit.add(el)
+        runScramble(el)
+      } else if (o < 0.05 && lit.has(el)) lit.delete(el)
     }
     const tick = () => {
       raf = requestAnimationFrame(tick)
@@ -251,85 +280,24 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     }
   }, [playing, runway])
 
-  // Hold settle: a scroll that comes to rest mid-move (a part half out of
-  // the stack) finishes that move in the direction of travel, so the tour
-  // always rests on one part at its pose. Only after real user input (a
-  // ?t= link, the rail and tests never settle), never while playing or
-  // under reduced motion, and any new input cancels it at once. Driven
-  // from the progress MotionValue: no scroll listeners (invariant 2).
-  const teardownActive = act.id === 'teardown'
-  useEffect(() => {
-    if (!teardownActive || playing || reducedMotion()) return
-    let lastInput = Number.NEGATIVE_INFINITY
-    let lastP = progress.get()
-    let dir = 0
-    let idle = 0
-    let raf = 0
-    let settling = false
-    // A finger resting on the glass is still holding the page: never settle
-    // under it, only once it lifts (and any momentum has run out).
-    let touching = false
-    const cancel = (): void => {
-      window.clearTimeout(idle)
-      cancelAnimationFrame(raf)
-      settling = false
-    }
-    const onInput = (): void => {
-      lastInput = performance.now()
-      cancel()
-    }
-    const onTouchStart = (): void => {
-      touching = true
-      onInput()
-    }
-    const onTouchEnd = (): void => {
-      touching = false
-      lastInput = performance.now()
-      window.clearTimeout(idle)
-      idle = window.setTimeout(settle, 180)
-    }
-    const settle = (): void => {
+  // Section settle across the whole film: a scroll that comes to rest
+  // between sections (an act changing, a part half out of the stack)
+  // finishes that move in the direction of travel, so the film always rests
+  // on a composed shot. The page-level settle (SectionSettle) takes over at
+  // the runway's ends. Off while the tour plays.
+  useScrollSettle(
+    progress,
+    (dir) => {
       const el = runway.current
-      if (el === null || touching || performance.now() - lastInput > 1500) return
-      const from = progress.get()
-      const to = holdTarget(from, dir)
-      if (to === null) return
-      settling = true
-      const t0 = performance.now()
-      const duration = 420 + Math.min(1, Math.abs(to - from) / 0.02) * 260
-      const frame = (now: number): void => {
-        const t = Math.min(1, (now - t0) / duration)
-        const eased = 1 - (1 - t) ** 3
-        scrollToProgress(el, from + (to - from) * eased, 'instant')
-        if (t < 1) raf = requestAnimationFrame(frame)
-        else settling = false
-      }
-      raf = requestAnimationFrame(frame)
-    }
-    const unsubscribe = progress.on('change', (p) => {
-      if (settling) return
-      if (p !== lastP) dir = p > lastP ? 1 : -1
-      lastP = p
-      window.clearTimeout(idle)
-      idle = window.setTimeout(settle, 180)
-    })
-    window.addEventListener('wheel', onInput, { passive: true })
-    window.addEventListener('touchstart', onTouchStart, { passive: true })
-    window.addEventListener('touchmove', onInput, { passive: true })
-    window.addEventListener('touchend', onTouchEnd, { passive: true })
-    window.addEventListener('touchcancel', onTouchEnd, { passive: true })
-    window.addEventListener('keydown', onInput)
-    return () => {
-      cancel()
-      unsubscribe()
-      window.removeEventListener('wheel', onInput)
-      window.removeEventListener('touchstart', onTouchStart)
-      window.removeEventListener('touchmove', onInput)
-      window.removeEventListener('touchend', onTouchEnd)
-      window.removeEventListener('touchcancel', onTouchEnd)
-      window.removeEventListener('keydown', onInput)
-    }
-  }, [teardownActive, playing, progress, runway])
+      const p = progress.get()
+      if (el === null || p <= 0 || p >= 1) return null
+      const to = restTarget(p, dir)
+      if (to === null) return null
+      const rect = el.getBoundingClientRect()
+      return rect.top + window.scrollY + to * (rect.height - window.innerHeight)
+    },
+    !playing,
+  )
 
   // Keyboard film navigation: arrows jump between acts with an aria-live
   // announcement of the act name (the chapter container below is the live
@@ -344,7 +312,8 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       if (next === undefined) return
       event.preventDefault()
       const el = runway.current
-      if (el !== null) scrollToProgress(el, next.start, reducedMotion() ? 'instant' : 'smooth')
+      if (el !== null)
+        scrollToProgress(el, actRestStart(next.id), reducedMotion() ? 'instant' : 'smooth')
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -354,7 +323,6 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
   // opacity over the page. Written straight to the DOM, never React state.
   // Hooks stay above the empty-chapters bail so the order never changes.
   const tintRef = useRef<HTMLDivElement>(null)
-  const scrimRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   useMotionValueEvent(progress, 'change', (p) => {
@@ -368,32 +336,41 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       card.style.setProperty('--card', amount.toFixed(3))
     }
     const { base } = stageColors(v)
-    const baseHex = `#${base.getHexString()}`
+    // The act tint belongs to the studio sweep; scenes carry their own.
     const tint = tintRef.current
-    if (tint !== null) tint.style.backgroundColor = `${baseHex}2e`
-    // Light stages wear ink text directly instead of the dark veil
-    // (Prompt D 11 scrim only applies while a stage is actually dark).
-    const light = luminance(baseHex) > 0.25
+    if (tint !== null) {
+      tint.style.backgroundColor = `#${base.getHexString()}2e`
+      tint.style.opacity = studioWeight(v).toFixed(3)
+    }
+    // Copy tone follows the room (section scenes): ink in light rooms,
+    // light type in the dark ones, over a veil that blends continuously.
+    const dark = darkWeight(v)
+    const light = dark < 0.5
     const root = rootRef.current
-    if (root !== null) root.classList.toggle('light-scope', light)
-    const scrim = scrimRef.current
-    if (scrim !== null) scrim.style.opacity = light ? '0' : String(scrimForStage(baseHex))
+    if (root !== null) {
+      root.classList.toggle('light-scope', light)
+      root.classList.toggle('dark-scope', !light)
+      const mix = (a: number, b: number): number => Math.round(a + (b - a) * dark)
+      root.style.setProperty('--veil-rgb', `${mix(242, 7)} ${mix(240, 8)} ${mix(235, 11)}`)
+      root.style.setProperty('--card-rgb', light ? '254 253 251' : '18 20 27')
+      root.style.setProperty('--card-ring', light ? '220 216 207' : '52 57 74')
+    }
   })
   if (chapter === undefined) return null
   const teardown = act.id === 'teardown'
   return (
-    <div ref={rootRef} className="group/film light-scope pointer-events-none absolute inset-0">
+    <div
+      ref={rootRef}
+      className="group/film light-scope pointer-events-none absolute inset-0"
+      style={
+        {
+          '--veil-rgb': '242 240 235',
+          '--card-rgb': '254 253 251',
+          '--card-ring': '220 216 207',
+        } as CSSProperties
+      }
+    >
       <div ref={tintRef} aria-hidden="true" className="absolute inset-0" />
-      <div
-        ref={scrimRef}
-        aria-hidden="true"
-        className="absolute inset-0"
-        style={{
-          background:
-            'linear-gradient(105deg, rgba(5,6,10,0.92) 0%, rgba(5,6,10,0.92) 38%, rgba(5,6,10,0) 68%)',
-          opacity: 0,
-        }}
-      />
       {/* Copy-side veils: crossfade with the act's side; never over the device. */}
       <div
         aria-hidden="true"
@@ -417,7 +394,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
         className="absolute inset-x-0 bottom-0 hidden h-32 md:block"
         style={{
           background:
-            'linear-gradient(to top, rgba(242,240,235,0.92) 0%, rgba(242,240,235,0.5) 45%, rgba(242,240,235,0) 100%)',
+            'linear-gradient(to top, rgb(var(--veil-rgb) / 0.92) 0%, rgb(var(--veil-rgb) / 0.5) 45%, rgb(var(--veil-rgb) / 0) 100%)',
         }}
       />
 
@@ -439,9 +416,9 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
           ref={cardRef}
           className="md:-m-7 md:rounded-[1.75rem] md:p-7"
           style={{
-            background: 'rgb(254 253 251 / calc(var(--card, 0) * 0.93))',
+            background: 'rgb(var(--card-rgb) / calc(var(--card, 0) * 0.9))',
             boxShadow:
-              '0 0 0 1px rgb(220 216 207 / var(--card, 0)), 0 24px 60px -30px rgb(40 30 10 / calc(var(--card, 0) * 0.45))',
+              '0 0 0 1px rgb(var(--card-ring) / var(--card, 0)), 0 24px 60px -30px rgb(0 0 0 / calc(var(--card, 0) * 0.45))',
             backdropFilter: 'blur(calc(var(--card, 0) * 18px))',
           }}
         >
@@ -466,7 +443,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                   >
                     <p className="kicker flex items-center gap-3 text-(--color-aether-strong)">
                       <span aria-hidden="true" className="h-px w-8 bg-(--color-aether)" />
-                      {chapter.kicker}
+                      <ScrambleText auto={false} text={chapter.kicker} />
                     </p>
                     <h2
                       className="display-lg mt-3 text-[1.55rem] text-balance md:mt-4 md:text-[clamp(1.85rem,3.3vw,3.35rem)]"
@@ -514,7 +491,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                     >
                       <p className="kicker flex items-center gap-2.5">
                         <span className="text-(--color-ink) tabular-nums">
-                          {String(i + 1).padStart(2, '0')}
+                          <ScrambleText auto={false} text={String(i + 1).padStart(2, '0')} />
                         </span>
                         <span className="text-(--color-faint)">/ {TEARDOWN_COPY.length}</span>
                         <span
@@ -522,7 +499,11 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                           className="mx-1 h-px w-7"
                           style={{ backgroundColor: TEARDOWN_LAYERS[i]?.accent ?? '#1f5fd0' }}
                         />
-                        <span className="text-(--color-aether-strong)">{copy.name}</span>
+                        <ScrambleText
+                          auto={false}
+                          className="text-(--color-aether-strong)"
+                          text={copy.name}
+                        />
                       </p>
                       <h2
                         className="display-lg mt-3 text-[1.5rem] text-balance md:mt-4 md:text-[clamp(1.7rem,3vw,3.1rem)]"
@@ -569,7 +550,9 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                 >
                   {chapter.body}
                 </motion.p>
-                {chapter.numeral !== undefined ? <BigNumeral numeral={chapter.numeral} /> : null}
+                {chapter.numeral !== undefined ? (
+                  <BigNumeral numeral={chapter.numeral} quiet={numeralQuiet(act.id)} />
+                ) : null}
                 {chapter.spec !== undefined ? <SpecLines lines={chapter.spec} /> : null}
               </>
             )}
@@ -631,7 +614,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                 e.preventDefault()
                 const el = runway.current
                 if (el !== null)
-                  scrollToProgress(el, a.start, reducedMotion() ? 'instant' : 'smooth')
+                  scrollToProgress(el, actRestStart(a.id), reducedMotion() ? 'instant' : 'smooth')
               }}
             >
               <span className="translate-x-1 text-xs font-medium text-(--color-dim) opacity-0 transition-[opacity,transform] duration-300 group-hover:translate-x-0 group-hover:opacity-100 group-data-[active=true]:translate-x-0 group-data-[active=true]:text-(--color-ink) group-data-[active=true]:opacity-100">

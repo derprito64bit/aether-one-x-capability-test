@@ -254,6 +254,14 @@
     font-size: clamp(3.5rem, 13vw, 5.5rem);
   }
 
+  /* Code-set figures (film numerals, teardown capabilities): mono, so the
+     decode never changes the width. */
+  .spec-num--code {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: -0.06em;
+  }
+
   @media (min-width: 768px) {
     .spec-num--stat {
       font-size: clamp(4.5rem, 7.4vw, 7.5rem);
@@ -351,6 +359,10 @@
   --color-aether: #7fb4ff;
   --color-aether-strong: #478dff;
   --color-border-hairline: #2c3040;
+  --color-border-strong: #3d4256;
+  --color-raise: #14161d;
+  /* Re-resolve inherited text: tokens alone leave colour computed upstream. */
+  color: var(--color-ink);
 }
 
 /* The reverse: light cards nested inside dark islands, and the film overlay
@@ -362,6 +374,9 @@
   --color-aether: #1f5fd0;
   --color-aether-strong: #1a4fb8;
   --color-border-hairline: #dcd8cf;
+  --color-border-strong: #c9c4b8;
+  --color-raise: #fefdfb;
+  color: var(--color-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {

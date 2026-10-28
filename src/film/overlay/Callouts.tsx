@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { MotionValue } from 'motion/react'
 import * as THREE from 'three'
+import { runScramble } from '../../lib/scramble.ts'
 import { TEARDOWN_COPY } from '../chapters.ts'
 import { cursorAt } from '../teardown/layers.ts'
 import {
@@ -101,6 +102,14 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
     }))
     const overviewColumn: Placed[] = []
     let lastLayer = -1
+    // Labels decode as they arrive: once per appearance, re-armed when gone.
+    const decoded = new WeakSet<HTMLElement>()
+    const decode = (label: HTMLElement, reveal: number): void => {
+      if (reveal > 0.05 && !decoded.has(label)) {
+        decoded.add(label)
+        runScramble(label, 520)
+      } else if (reveal <= 0.01) decoded.delete(label)
+    }
     let overviewShown = false
     // 'aside': label columns either side of the part, title and detail.
     // 'over': compact title chips over the part, beside each hotspot, for
@@ -180,6 +189,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
     const hideItem = (i: number): void => {
       const label = labelRefs.current[i]
       if (label !== null && label !== undefined) {
+        decoded.delete(label)
         label.style.opacity = '0'
         label.style.visibility = 'hidden'
       }
@@ -335,6 +345,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
             const x = isLeft ? edge - size.w + travel : edge - travel
             label.style.visibility = 'visible'
             label.style.opacity = String(slot.reveal)
+            decode(label, slot.reveal)
             label.style.transform = `translate(${x.toFixed(1)}px, ${slot.y.toFixed(1)}px)`
             label.dataset.side = slot.side
             const ly = slot.y + mid
@@ -420,6 +431,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
         const travel = reduced ? 0 : (1 - slot.reveal) * 8
         label.style.visibility = 'visible'
         label.style.opacity = String(slot.reveal)
+        decode(label, slot.reveal)
         const width = full ? size.w : size.num
         label.style.transform = `translate(${(edge - width - travel).toFixed(1)}px, ${slot.y.toFixed(1)}px)`
         if (leader !== null && leader !== undefined) {
@@ -504,8 +516,11 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
             textShadow: '0 0 6px rgb(242 240 235), 0 0 16px rgb(242 240 235)',
           }}
         >
-          <p className="text-[13.5px] leading-[18px] font-semibold tracking-[-0.005em] text-(--color-ink) group-data-[side=left]:text-right group-data-[labels=over]/callouts:text-[12px]">
-            {item.title}
+          <p className="font-mono text-[11.5px] leading-[18px] font-medium tracking-[0.08em] text-(--color-ink) uppercase group-data-[side=left]:text-right group-data-[labels=over]/callouts:text-[10.5px]">
+            <span aria-hidden="true" data-scramble-text={item.title}>
+              {item.title}
+            </span>
+            <span className="sr-only">{item.title}</span>
           </p>
           <p className="mt-0.5 text-[12.5px] leading-snug text-(--color-dim) group-data-[side=left]:text-right group-data-[labels=over]/callouts:hidden">
             {item.detail}
@@ -525,7 +540,10 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
           <span className="text-(--color-faint) group-data-[overview=num]/film:font-medium group-data-[overview=num]/film:text-(--color-ink)">
             {String(i + 1).padStart(2, '0')}
           </span>
-          <span className="text-(--color-ink) group-data-[overview=num]/film:hidden">
+          <span
+            className="text-(--color-ink) group-data-[overview=num]/film:hidden"
+            data-scramble-text={copy.name}
+          >
             {copy.name}
           </span>
         </div>

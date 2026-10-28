@@ -152,6 +152,6 @@ export function resolveColumn(labels: ColumnLabel[], min: number, max: number, g
  * cursor fraction (0..1), `focus` the bridge's presentation strength.
  */
 export function calloutReveal(d: number, k: number, focus: number): number {
-  const start = 0.24 + 0.07 * k
-  return focus * Math.min(1, Math.max(0, (d - start) / 0.08))
+  const start = 0.32 + 0.06 * k
+  return focus * Math.min(1, Math.max(0, (d - start) / 0.07))
 }

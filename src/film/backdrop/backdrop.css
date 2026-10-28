@@ -1,0 +1,408 @@
+/*
+ * Section rooms behind the film's transparent canvas (Backdrop.tsx).
+ * Every moving part is transform or opacity driven by --t (the act's own
+ * progress, 0..1): nothing re-rasterises while scrubbing, and blurred
+ * layers only ever translate, so their blur is painted once.
+ */
+.bd {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  visibility: hidden;
+  contain: strict;
+  --t: 0;
+}
+
+.bd > * {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* ---- Back-wall figure and caption, shared by every room ---- */
+.bd-board {
+  left: var(--fx);
+  top: var(--fy);
+  transform: translate(-50%, -50%) translateX(calc((var(--t) - 0.5) * -3vw));
+  display: grid;
+  justify-items: center;
+}
+.bd-figure {
+  grid-area: 1 / 1;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  /* Fills its free zone (--fw) by length (--chars; mono glyphs are about
+     0.53em wide at this tracking), never past 19vw. */
+  font-size: clamp(3.5rem, min(19vw, calc(var(--fw, 40vw) / (var(--chars, 4) * 0.53))), 24rem);
+  line-height: 0.82;
+  letter-spacing: -0.075em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.bd-figure-line {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+/* The unit labels the figure from above, so the number keeps the width. */
+.bd-unit {
+  order: -1;
+  font-size: max(0.16em, 13px);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.12em 0.06em;
+  opacity: 0.8;
+}
+.bd-caption {
+  grid-area: 2 / 1;
+  margin-top: clamp(1rem, 2.4vw, 2.25rem);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  line-height: 1.7;
+  text-align: center;
+  /* Wraps inside the figure's own free zone. */
+  max-width: max(var(--fw, 40vw), 15rem);
+}
+
+/* Phones: the device fills the middle and the copy the bottom, so the
+   figure takes the strip between the nav and the top of the phone, its
+   unit inline, no caption. A room whose subject fills the whole frame (the
+   battery x-ray) shows none; its copy keeps the numeral instead. */
+@media (max-width: 767px) {
+  .bd-board {
+    left: 50%;
+    top: 12.5%;
+    transform: translate(-50%, -50%);
+  }
+  .bd-figure {
+    font-size: clamp(2.75rem, min(19vw, calc(80vw / (var(--chars, 4) * 0.53))), 5.25rem);
+  }
+  .bd-figure-line {
+    flex-direction: row;
+  }
+  .bd-unit {
+    order: 0;
+    font-size: 11px;
+    margin: 0.25em 0 0 0.5em;
+  }
+  .bd-caption,
+  .bd-board--desktop {
+    display: none;
+  }
+}
+
+.bd-horizon {
+  inset: auto 0 0;
+  height: 42%;
+  background: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0) 0%,
+    rgb(30 36 46 / 0.07) 34%,
+    rgb(30 36 46 / 0.13) 100%
+  );
+}
+
+.bd-vignette {
+  inset: 0;
+  background: radial-gradient(ellipse 85% 75% at 55% 45%, transparent 35%, rgb(0 0 0 / 0.75) 100%);
+}
+
+/* ---- Titanium (design): brushed Grade-5 metal, figure milled into it ---- */
+.bd-titanium {
+  background: linear-gradient(180deg, #f0f1f3 0%, #e1e4e8 46%, #d0d4da 100%);
+}
+.bd-brush {
+  inset: 0;
+  opacity: 0.55;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.4) 0 1px,
+      rgb(0 0 0 / 0.025) 1px 3px,
+      transparent 3px 5px
+    ),
+    repeating-linear-gradient(90deg, transparent 0 37px, rgb(255 255 255 / 0.25) 37px 38px);
+}
+.bd-sheen {
+  inset: -10% -60%;
+  background: linear-gradient(
+    103deg,
+    transparent 38%,
+    rgb(255 255 255 / 0.65) 49%,
+    rgb(255 255 255 / 0.1) 55%,
+    transparent 62%
+  );
+  transform: translateX(calc((var(--t) - 0.5) * 30%));
+  will-change: transform;
+}
+.bd-titanium .bd-figure {
+  color: rgb(58 64 74 / 0.16);
+  text-shadow:
+    0 1px 0 rgb(255 255 255 / 0.85),
+    0 -1px 0 rgb(0 0 0 / 0.07);
+}
+.bd-titanium .bd-caption {
+  color: rgb(58 64 74 / 0.6);
+}
+
+/* ---- Glass (front glass): ice light, the bezel figure in outline ---- */
+.bd-glass {
+  background: radial-gradient(120% 95% at 45% 38%, #f7fafd 0%, #e7eef5 52%, #d4dde8 100%);
+}
+.bd-streak {
+  width: 160%;
+  height: 1px;
+  left: -30%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.95) 45%, transparent 60%);
+  box-shadow: 0 0 22px 6px rgb(255 255 255 / 0.5);
+  transform: rotate(-24deg) translateX(calc((var(--t) - 0.5) * 22%));
+}
+.bd-streak--a {
+  top: 30%;
+}
+.bd-streak--b {
+  top: 62%;
+  opacity: 0.6;
+  transform: rotate(-24deg) translateX(calc((0.5 - var(--t)) * 16%));
+}
+.bd-glass .bd-figure {
+  color: rgb(255 255 255 / 0.4);
+  -webkit-text-stroke: 1.5px rgb(36 76 128 / 0.2);
+}
+.bd-glass .bd-caption {
+  color: rgb(36 66 104 / 0.6);
+}
+
+/* ---- Projector (camera): a black room, the figure thrown on the wall ---- */
+.bd-projector {
+  background: #060709;
+}
+.bd-beam {
+  /* Light from a lens off the top-left corner: a soft cone, brightest at
+     the lens and spreading wide, painted once (it only fades). */
+  inset: -20%;
+  background: conic-gradient(
+    from 96deg at 6% 4%,
+    transparent 0deg,
+    rgb(214 226 255 / 0.05) 6deg,
+    rgb(214 226 255 / 0.18) 16deg,
+    rgb(214 226 255 / 0.05) 30deg,
+    transparent 40deg
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse 120% 110% at 6% 4%,
+    #000 0%,
+    rgb(0 0 0 / 0.55) 55%,
+    transparent 90%
+  );
+  mask-image: radial-gradient(
+    ellipse 120% 110% at 6% 4%,
+    #000 0%,
+    rgb(0 0 0 / 0.55) 55%,
+    transparent 90%
+  );
+  filter: blur(22px);
+  opacity: calc(0.5 + var(--t) * 0.5);
+}
+.bd-screen {
+  left: 16%;
+  right: 6%;
+  top: 12%;
+  bottom: 18%;
+  background: radial-gradient(
+    ellipse 60% 55% at 55% 45%,
+    rgb(226 234 255 / 0.1),
+    rgb(226 234 255 / 0.03) 60%,
+    transparent 75%
+  );
+  box-shadow: inset 0 0 0 1px rgb(226 234 255 / 0.05);
+}
+.bd-grain {
+  inset: 0;
+  opacity: 0.12;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.bd-projector .bd-figure {
+  color: #eef2fb;
+  /* Projector light: a bloom, and the slight colour fringe of a real lens. */
+  text-shadow:
+    -2px 0 rgb(255 92 92 / 0.28),
+    2px 0 rgb(92 168 255 / 0.3),
+    0 0 28px rgb(196 214 255 / 0.55),
+    0 0 110px rgb(150 180 255 / 0.28);
+}
+.bd-projector .bd-caption {
+  color: rgb(222 230 255 / 0.62);
+  text-shadow: 0 0 12px rgb(196 214 255 / 0.5);
+}
+
+/* ---- Spectrum (display): every colour the panel can show ---- */
+.bd-spectrum {
+  background: #040507;
+}
+.bd-band {
+  left: -40%;
+  right: -40%;
+  top: 18%;
+  height: 62%;
+  background: linear-gradient(
+    90deg,
+    #ff2d55,
+    #ff9f0a,
+    #ffd60a,
+    #30d158,
+    #40c8e0,
+    #0a84ff,
+    #5e5ce6,
+    #bf5af2,
+    #ff2d55,
+    #ff9f0a,
+    #ffd60a,
+    #30d158
+  );
+  filter: blur(70px) saturate(1.25);
+  opacity: 0.62;
+  transform: translateX(calc(var(--t) * -24%));
+  will-change: transform;
+}
+.bd-pixels {
+  inset: 0;
+  opacity: 0.55;
+  background:
+    repeating-linear-gradient(90deg, rgb(4 5 7 / 0.55) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(0deg, rgb(4 5 7 / 0.55) 0 1px, transparent 1px 3px);
+}
+.bd-spectrum .bd-figure {
+  color: #ffffff;
+  text-shadow: 0 0 40px rgb(255 255 255 / 0.3);
+}
+.bd-spectrum .bd-caption {
+  color: rgb(255 255 255 / 0.72);
+}
+
+/* ---- Data (storage): a wall of hex, scrolling with the act ---- */
+.bd-data {
+  background: radial-gradient(120% 100% at 58% 40%, #0e1833 0%, #070b17 58%, #04060b 100%);
+}
+.bd-hex {
+  inset: -30% -5% auto;
+  margin: 0;
+  font: 500 12px/1.75 var(--font-mono);
+  letter-spacing: 0.32em;
+  color: rgb(112 142 255 / 0.17);
+  white-space: pre;
+  transform: translateY(calc(var(--t) * -16%));
+  will-change: transform;
+}
+.bd-data .bd-figure {
+  color: #e2e8ff;
+  text-shadow: 0 0 34px rgb(92 128 255 / 0.55);
+}
+.bd-data .bd-caption {
+  color: rgb(186 200 255 / 0.7);
+}
+
+/* ---- Charge (battery): a green level rising through the act ---- */
+.bd-charge {
+  background: #050706;
+}
+.bd-fill {
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgb(62 224 143 / 0.24) 0%,
+    rgb(62 224 143 / 0.08) 55%,
+    transparent 100%
+  );
+  transform-origin: bottom;
+  transform: scaleY(calc(0.18 + var(--t) * 0.72));
+}
+.bd-meniscus {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(150 255 200 / 0.75) 30%,
+    rgb(150 255 200 / 0.75) 70%,
+    transparent
+  );
+  box-shadow: 0 0 24px 4px rgb(62 224 143 / 0.45);
+  transform: translateY(calc(var(--level-px, 0px) * -1));
+}
+.bd-charge .bd-figure {
+  color: #e8fff2;
+  text-shadow: 0 0 36px rgb(62 224 143 / 0.5);
+}
+.bd-charge .bd-caption {
+  color: rgb(190 255 220 / 0.7);
+}
+
+/* ---- OS (software): a quiet grid of app tiles ---- */
+.bd-os {
+  background: radial-gradient(120% 100% at 55% 30%, #171b26 0%, #0b0d13 68%);
+}
+.bd-tiles {
+  inset: -20% 0;
+  opacity: 0.7;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='76' height='76'%3E%3Crect x='14' y='14' width='48' height='48' rx='14' fill='none' stroke='%23ffffff' stroke-opacity='0.07'/%3E%3C/svg%3E");
+  transform: translateY(calc(var(--t) * -6%));
+}
+.bd-os .bd-figure {
+  color: #edf0f7;
+  text-shadow: 0 0 30px rgb(170 190 255 / 0.35);
+}
+.bd-os .bd-caption {
+  color: rgb(200 210 235 / 0.7);
+}
+
+/* ---- Neural (AI): a dot matrix, a wave of activations crossing it ---- */
+.bd-neural {
+  background: #04060c;
+}
+.bd-dots {
+  inset: 0;
+  background-image: radial-gradient(circle, rgb(88 128 255 / 0.28) 0 1.2px, transparent 1.7px);
+  background-size: 22px 22px;
+}
+.bd-pulse {
+  width: 70vmax;
+  height: 70vmax;
+  left: -35vmax;
+  top: calc(50% - 35vmax);
+  transform: translateX(calc(var(--t) * 100vw));
+  will-change: transform;
+  border-radius: 50%;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 0%, transparent 70%);
+}
+.bd-dots--hot {
+  /* Pinned to the room while its window travels, so the dots line up. */
+  position: absolute;
+  inset: auto;
+  width: 100vw;
+  height: 100vh;
+  left: 35vmax;
+  top: calc(35vmax - 50vh);
+  transform: translateX(calc(var(--t) * -100vw));
+  background-image: radial-gradient(circle, rgb(150 182 255 / 0.95) 0 1.6px, transparent 2.2px);
+}
+.bd-neural .bd-figure {
+  color: #e4ebff;
+  text-shadow: 0 0 36px rgb(77 125 255 / 0.6);
+}
+.bd-neural .bd-caption {
+  color: rgb(190 205 255 / 0.7);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .bd-beam,
+  .bd-band {
+    filter: none;
+  }
+}

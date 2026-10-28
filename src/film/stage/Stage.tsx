@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { MotionValue } from 'motion/react'
 import * as THREE from 'three'
+import { darkWeight, studioWeight } from '../backdrop/scenes.ts'
 import { sampleFilm } from '../sample.ts'
 import { computeFilmStates } from '../states.ts'
 import { stageColors } from './stageColors.ts'
@@ -42,6 +43,9 @@ export function Stage({ progress }: { progress: MotionValue<number> }) {
   const pool = useRef<THREE.Mesh>(null)
   const poolMat = useRef<THREE.MeshBasicMaterial>(null)
   const floorMat = useRef<THREE.MeshBasicMaterial>(null)
+  const sweep = useRef<THREE.Mesh>(null)
+  const sweepMat = useRef<THREE.MeshBasicMaterial>(null)
+  const floor = useRef<THREE.Mesh>(null)
   // Floor tones derive from the act colour (scratch objects: zero allocation
   // per frame). The sweep and the floor share them so no seam can show.
   const tones = useMemo(
@@ -98,6 +102,20 @@ export function Stage({ progress }: { progress: MotionValue<number> }) {
 
   useFrame(() => {
     const p = progress.get()
+    // Section scenes (round 06): the sweep and floor own the background
+    // only in the studio acts and fade out where an HTML room takes over;
+    // the contact pool stays on the light rooms (it grounds the phone on
+    // titanium and glass too) and goes in the dark ones. Transparent from
+    // birth: opacity changes never recompile; fully faded meshes skip the
+    // draw.
+    const studio = studioWeight(p)
+    const sm = sweepMat.current
+    if (sm !== null) sm.opacity = studio
+    if (sweep.current !== null) sweep.current.visible = studio > 0.001
+    const fm0 = floorMat.current
+    if (fm0 !== null) fm0.opacity = studio
+    if (floor.current !== null) floor.current.visible = studio > 0.001
+    const ground = 1 - darkWeight(p)
     // Contact pool follows the device every frame: wider laid flat, fainter
     // aloft. It must run before the colour early-return below, or it
     // freezes while the stage colour rests and depends on scroll history.
@@ -111,8 +129,8 @@ export function Stage({ progress }: { progress: MotionValue<number> }) {
       const span = 1.4 * s.scale * (1 + 0.35 * st.layDown)
       mesh.position.set(s.px, -0.415, 0)
       mesh.scale.set(span, span, 1)
-      mat.opacity = 0.55 * closeness
-      mesh.visible = closeness > 0.01
+      mat.opacity = 0.55 * closeness * ground
+      mesh.visible = closeness * ground > 0.01
     }
     if (ctx === null) return
     const { base, top } = stageColors(p)
@@ -148,14 +166,20 @@ export function Stage({ progress }: { progress: MotionValue<number> }) {
   return (
     <group name="stage">
       {/* Room: gradient shell, BackSide so the orbit never leaves it. */}
-      <mesh scale={[6, 6, 6]}>
+      <mesh ref={sweep} scale={[6, 6, 6]} renderOrder={-3}>
         <sphereGeometry args={[1, 48, 32]} />
-        <meshBasicMaterial map={texture} side={THREE.BackSide} depthWrite={false} />
+        <meshBasicMaterial
+          ref={sweepMat}
+          map={texture}
+          side={THREE.BackSide}
+          depthWrite={false}
+          transparent
+        />
       </mesh>
       {/* Floor: unlit sweep tone with a radial fade, a backdrop, not a
           subject. Unlit on purpose: a lit disc never matches the unlit
           room, and the mismatch is the seam. Grounding is the contact pool. */}
-      <mesh position={[0, -0.42, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-2}>
+      <mesh ref={floor} position={[0, -0.42, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-2}>
         <circleGeometry args={[3, 64]} />
         <meshBasicMaterial
           ref={floorMat}
