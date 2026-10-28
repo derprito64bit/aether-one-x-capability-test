@@ -3,6 +3,14 @@
 Auto-loaded context for Claude Code. Read this first, then `docs/context.md` for the
 compaction-safe session state and `docs/handoff.md` for the running log.
 
+> **REBUILD IN PROGRESS (2026-10-28). Read `PLAN.md` and `LOG.md` first.** The owner
+> wants the site rebuilt from scratch as an expanded, more polished version of the same
+> idea, with a new Blender glTF phone, a fresh visual direction, and a loading page
+> where the phone is the progress bar. The current `main` (PR #1) is a stopgap. Do not
+> use the existing `src/film/**` or `src/components/PhoneViewer/**` code or the old
+> procedural model as a reference for the rebuild; the sections below describe that
+> stopgap code base and its rules until it is replaced.
+
 ---
 
 ## What this is
