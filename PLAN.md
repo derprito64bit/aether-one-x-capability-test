@@ -54,6 +54,14 @@ A first-visit loading screen where the phone is the progress bar.
 - Repeat visits with a warm cache should skip or flash it for <= 300 ms; never block for a cached model.
 - Accessible: `role="progressbar"` with `aria-valuenow`, and a text percentage.
 
+## Repo workflow
+
+Work directly in this repo (`derprito64bit/muse-spark-testing`) on a branch per
+stage, PR, CI green, merge; Vercel deploys `main`. The local build repo
+`C:\Users\Aaron\aether-one-x-v2` is synced after merges (apply the merged diff
+on a branch there, merge to `master`) until the owner retires it. The old
+"work in the build repo, copy to deploy" ritual in CLAUDE.md is superseded.
+
 ## Stages (each in a fresh session; update LOG.md at the end of each)
 
 ### R1 - Direction and storyboard
