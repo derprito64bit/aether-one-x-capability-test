@@ -8,9 +8,18 @@ for (const route of ROUTES) {
     await page.goto(route)
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     // Let entrance motion settle: axe must judge the steady state, never a
-    // mid-crossfade frame (partial opacity reads as low contrast).
+    // mid-crossfade frame (partial opacity reads as low contrast). Wait for
+    // running animations to finish rather than a fixed sleep: entrances run
+    // up to ~1 s and slower engines (WebKit on CI) lost a 600 ms race.
     await page.evaluate(() => document.fonts.ready)
-    await page.waitForTimeout(600)
+    await page
+      .waitForFunction(
+        () => document.getAnimations().every((a) => a.playState !== 'running'),
+        undefined,
+        { timeout: 5000 },
+      )
+      .catch(() => undefined)
+    await page.waitForTimeout(250)
     const results = await new AxeBuilder({ page }).analyze()
     const serious = results.violations.filter(
       (v) => v.impact === 'serious' || v.impact === 'critical',
