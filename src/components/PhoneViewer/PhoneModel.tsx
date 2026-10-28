@@ -11,11 +11,14 @@ import {
   CHAMFER,
   CORNER_R,
   DIM,
+  DISPLAY_FLEX,
   DISPLAY_INSET,
   DISPLAY_PANEL,
   FRONT_GLASS,
   GLASS_FRONT_Z,
+  MIDFRAME,
   PANEL_SPLIT,
+  PUNCH,
 } from './phoneDimensions.ts'
 import {
   assignRailGroups,
@@ -26,6 +29,9 @@ import {
   bodyOutlineShape,
   fitPlanarUVs,
   RING_OPENING,
+  FRAME_BODY_OPENING,
+  createOutlineAnnulusGeometry,
+  createRoundedRectRingGeometry,
   createLowerPanelGeometry,
   createPanelGapGeometry,
   roundedRectSlabGeometry,
@@ -189,6 +195,59 @@ function PhoneModelInner({
       ),
     [],
   )
+  // Showcase glass dressing (round 05b): a bright rim band over the glass
+  // edge (front band plus the thickness wall, the 2.5D edge), and a
+  // reflection sheen over the face. Both sit at opacity 0 except while
+  // the film presents the cover glass.
+  const glassRimGeometry = useMemo(() => {
+    // Same circular-corner outline as the glass slab, 0.01mm inside it.
+    const o = {
+      halfW: RING_OPENING.halfW - 0.00002,
+      halfH: RING_OPENING.halfH - 0.00002,
+      r: RING_OPENING.r - 0.00002,
+    }
+    const band = 0.00045
+    return createOutlineAnnulusGeometry(
+      o,
+      { halfW: o.halfW - band, halfH: o.halfH - band, r: o.r - band },
+      FRONT_GLASS.z - FRONT_GLASS.depth / 2 - 0.000005,
+      FRONT_GLASS.z + FRONT_GLASS.depth / 2 + 0.000005,
+      detail === 'low' ? 10 : 24,
+    )
+  }, [detail])
+  // Bevel glint: a 0.22mm line 0.6mm inside the edge, on the front face.
+  const glassGlintGeometry = useMemo(() => {
+    const o = {
+      halfW: RING_OPENING.halfW - 0.00061,
+      halfH: RING_OPENING.halfH - 0.00061,
+      r: RING_OPENING.r - 0.00061,
+    }
+    const band = 0.00022
+    return createOutlineAnnulusGeometry(
+      o,
+      { halfW: o.halfW - band, halfH: o.halfH - band, r: o.r - band },
+      -0.000001,
+      0.000001,
+      detail === 'low' ? 10 : 24,
+    )
+  }, [detail])
+  useDisposeGeometry(glassGlintGeometry)
+  const glassSheenGeometry = useMemo(() => {
+    const inset = 0.0003
+    const geometry = new THREE.ShapeGeometry(
+      bodyOutlineShape(
+        RING_OPENING.halfW - inset,
+        RING_OPENING.halfH - inset,
+        RING_OPENING.r - inset,
+        24,
+      ),
+      6,
+    )
+    fitPlanarUVs(geometry)
+    return geometry
+  }, [])
+  useDisposeGeometry(glassRimGeometry)
+  useDisposeGeometry(glassSheenGeometry)
   // Subpixel veil over the active area with the active area's rounded
   // corners: a square plane's corners ran past the display and into the
   // ring's corners.
@@ -216,6 +275,56 @@ function PhoneModelInner({
     () => createBezelGeometry(INK_FIT.halfW, INK_FIT.halfH, 0.036, 0.0774, INK_FIT.r),
     [],
   )
+  // Midframe plate inside the rails, just under the ring lid: tucked 0.3mm
+  // into the rail wall. Components and screws mount on its rear face.
+  // A plain extrude, not the bevelled slab helper (~5k triangles for a
+  // plate that only shows in the teardown); coarser at LOD1.
+  const midplateGeometry = useMemo(() => {
+    const geometry = new THREE.ExtrudeGeometry(
+      bodyOutlineShape(
+        FRAME_BODY_OPENING.halfW + 0.0003,
+        FRAME_BODY_OPENING.halfH + 0.0003,
+        FRAME_BODY_OPENING.r + 0.0003,
+        detail === 'low' ? 6 : 12,
+      ),
+      { depth: MIDFRAME.plateDepth, bevelEnabled: false, curveSegments: 4, steps: 1 },
+    )
+    geometry.translate(0, 0, -MIDFRAME.plateDepth / 2)
+    fitPlanarUVs(geometry)
+    return geometry
+  }, [detail])
+  // Machined ribs on the plate's rear face: the battery bay and the board
+  // bay, 0.2mm proud, so the presented midframe reads as a machined part.
+  const midplateRibs = useMemo(
+    () => [
+      {
+        y: -0.0168,
+        geometry: createRoundedRectRingGeometry(
+          0.0626,
+          0.0727,
+          0.003,
+          0.0614,
+          0.0715,
+          0.0025,
+          0.0002,
+        ),
+      },
+      {
+        y: 0.0425,
+        geometry: createRoundedRectRingGeometry(
+          0.0694,
+          0.0486,
+          0.003,
+          0.0682,
+          0.0474,
+          0.0025,
+          0.0002,
+        ),
+      },
+    ],
+    [],
+  )
+  useEffect(() => () => midplateRibs.forEach((r) => r.geometry.dispose()), [midplateRibs])
   const panelGapTopGeometry = useMemo(() => createPanelGapGeometry(true), [])
   const panelGapBottomGeometry = useMemo(() => createPanelGapGeometry(false), [])
   // Split finishes: proud lower panel following the ceramic outline.
@@ -242,6 +351,7 @@ function PhoneModelInner({
   useDisposeGeometry(panelGapTopGeometry)
   useDisposeGeometry(panelGapBottomGeometry)
   useDisposeGeometry(lowerPanelGeometry)
+  useDisposeGeometry(midplateGeometry)
   const lensRefs = useRef<Partial<Record<FocusLensId, THREE.Group>>>({})
   const focusRef = useRef<{ key: FocusLensId | null; blend: number }>({ key: focusLens, blend: 0 })
   // Rail materials in group order (+X, -X, +Y, -Y) for the split extrusion.
@@ -335,6 +445,18 @@ function PhoneModelInner({
         <mesh geometry={frameBodyGeometry} material={rails} castShadow />
         <mesh geometry={frameRimGeometry} material={rails} castShadow />
         <mesh geometry={frameRingGeometry} material={rails} castShadow />
+        <mesh geometry={midplateGeometry} position={[0, 0, MIDFRAME.plateZ]}>
+          <primitive object={set.midplate} attach="material" />
+        </mesh>
+        {midplateRibs.map((rib) => (
+          <mesh
+            key={rib.y}
+            geometry={rib.geometry}
+            position={[0, rib.y, MIDFRAME.plateZ - MIDFRAME.plateDepth / 2 - 0.0001]}
+          >
+            <primitive object={set.midplate} attach="material" />
+          </mesh>
+        ))}
         <EdgeDetails set={set} detail={detail} />
       </group>
       <group ref={groups?.back}>
@@ -392,6 +514,23 @@ function PhoneModelInner({
           <primitive object={set.screen} attach="material" />
         </mesh>
         <FrontGlassDetails set={set} />
+        <mesh geometry={glassRimGeometry} renderOrder={3}>
+          <primitive object={set.glassRim} attach="material" />
+        </mesh>
+        <mesh
+          geometry={glassGlintGeometry}
+          position={[0, 0, GLASS_FRONT_Z + 0.000006]}
+          renderOrder={4}
+        >
+          <primitive object={set.glassGlint} attach="material" />
+        </mesh>
+        <mesh
+          geometry={glassSheenGeometry}
+          position={[0, 0, GLASS_FRONT_Z + 0.000003]}
+          renderOrder={3}
+        >
+          <primitive object={set.glassSheen} attach="material" />
+        </mesh>
         {detail === 'high' ? (
           // Macro subpixel veil rides the glass it is drawn on (in the
           // display group it sliced through the glass as the stack
@@ -413,6 +552,51 @@ function PhoneModelInner({
         <mesh geometry={displaySlabGeometry} position={[0, 0, DISPLAY_PANEL.z]}>
           <primitive object={set.display} attach="material" />
         </mesh>
+        {/* Front-camera cutout in the panel, under the glass punch-hole */}
+        <mesh position={[0, PUNCH.y, DISPLAY_PANEL.z + DISPLAY_PANEL.depth / 2 + 0.00001]}>
+          <circleGeometry args={[PUNCH.r + 0.00025, 24]} />
+          <primitive object={set.lensCavity} attach="material" />
+        </mesh>
+        {/* Chip-on-film tail, hinged on the panel's bottom edge: folded
+            behind the panel (rotation PI), the film director unfolds it
+            below the panel while the display is presented. */}
+        <group
+          name="display-flex"
+          position={[0, DISPLAY_FLEX.hingeY, DISPLAY_FLEX.z]}
+          rotation={[Math.PI, 0, 0]}
+        >
+          <mesh position={[0, -DISPLAY_FLEX.length / 2, 0]}>
+            <boxGeometry args={[DISPLAY_FLEX.width, DISPLAY_FLEX.length, DISPLAY_FLEX.thickness]} />
+            <primitive object={set.flex} attach="material" />
+          </mesh>
+          <mesh
+            position={[0, -DISPLAY_FLEX.icY, DISPLAY_FLEX.thickness / 2 + DISPLAY_FLEX.icDepth / 2]}
+          >
+            <boxGeometry args={[DISPLAY_FLEX.icW, DISPLAY_FLEX.icH, DISPLAY_FLEX.icDepth]} />
+            <primitive object={set.driverIc} attach="material" />
+          </mesh>
+          <mesh
+            position={[
+              0,
+              -DISPLAY_FLEX.connY,
+              DISPLAY_FLEX.thickness / 2 + DISPLAY_FLEX.connDepth / 2,
+            ]}
+          >
+            <boxGeometry args={[DISPLAY_FLEX.connW, DISPLAY_FLEX.connH, DISPLAY_FLEX.connDepth]} />
+            <primitive object={set.driverIc} attach="material" />
+          </mesh>
+          {/* Stiffener and gold contact row on the connector */}
+          <mesh
+            position={[
+              0,
+              -DISPLAY_FLEX.connY,
+              DISPLAY_FLEX.thickness / 2 + DISPLAY_FLEX.connDepth + 0.00001,
+            ]}
+          >
+            <planeGeometry args={[DISPLAY_FLEX.connW * 0.8, DISPLAY_FLEX.connH * 0.35]} />
+            <primitive object={set.portContact} attach="material" />
+          </mesh>
+        </group>
       </group>
     </group>
   )

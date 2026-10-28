@@ -56,7 +56,7 @@
   }
 
   :root {
-    --film-height: 1100vh;
+    --film-height: 1800vh;
     --sat: env(safe-area-inset-top, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --page-gutter: clamp(1.25rem, 4vw, 3rem);
@@ -64,20 +64,21 @@
 
   @media (min-width: 1024px) {
     :root {
-      /* 1900svh gives the teardown's ten layers ~38vh each without moving
-         a single act boundary, because every boundary is a fraction. */
-      --film-height: 1900vh;
+      /* 3200svh gives each teardown layer ~62vh (its hold ~37vh, room to
+         overscroll) without moving a single act boundary, because every
+         boundary is a fraction. */
+      --film-height: 3200vh;
     }
   }
 
   @supports (height: 100svh) {
     :root {
-      --film-height: 1400svh;
+      --film-height: 2300svh;
     }
 
     @media (min-width: 1024px) {
       :root {
-        --film-height: 1900svh;
+        --film-height: 3200svh;
       }
     }
   }

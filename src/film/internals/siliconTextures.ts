@@ -18,15 +18,15 @@ export function createDieMarkingTexture(): CanvasTexture {
   const { canvas, ctx } = makeCanvas(256, 256)
   if (ctx !== null) {
     ctx.clearRect(0, 0, 256, 256)
-    ctx.fillStyle = 'rgba(200,212,228,0.5)'
+    ctx.fillStyle = 'rgba(206,216,232,0.72)'
     ctx.textAlign = 'center'
     ctx.font = '600 30px monospace'
     ctx.fillText('A1 ULTRA', 128, 84)
     ctx.font = '400 20px monospace'
-    ctx.fillStyle = 'rgba(200,212,228,0.38)'
+    ctx.fillStyle = 'rgba(206,216,232,0.55)'
     ctx.fillText('AX24-0317', 128, 124)
     ctx.fillText('3NM · TW', 128, 154)
-    ctx.strokeStyle = 'rgba(200,212,228,0.3)'
+    ctx.strokeStyle = 'rgba(206,216,232,0.4)'
     ctx.strokeRect(52, 52, 152, 130)
   }
   const texture = new CanvasTexture(canvas)
@@ -39,34 +39,36 @@ export function createDieMarkingTexture(): CanvasTexture {
  * reflectivities, driving die roughness and faint emissive.
  */
 export function createFloorplanTexture(): CanvasTexture {
-  const { canvas, ctx } = makeCanvas(128, 128)
+  const { canvas, ctx } = makeCanvas(256, 256)
   if (ctx !== null) {
-    ctx.fillStyle = '#808080'
-    ctx.fillRect(0, 0, 128, 128)
+    // Transparent base: the overlay only adds faint cool structure over
+    // the dark die (an opaque gray floorplan veiled it pale).
+    ctx.clearRect(0, 0, 256, 256)
     let v = 1237
     const rng = (): number => {
       v = (v * 9301 + 49297) % 233280
       return v / 233280
     }
     // Regular SRAM-like arrays top-left.
-    for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-        const g = 110 + Math.round(rng() * 30)
-        ctx.fillStyle = `rgb(${g},${g},${g})`
-        ctx.fillRect(8 + c * 6, 8 + r * 6, 5, 5)
+    for (let r = 0; r < 16; r++) {
+      for (let c = 0; c < 16; c++) {
+        ctx.fillStyle = `rgba(150,160,215,${(0.07 + rng() * 0.05).toFixed(3)})`
+        ctx.fillRect(16 + c * 6, 16 + r * 6, 5, 5)
       }
     }
     // Noisy logic elsewhere.
-    for (let i = 0; i < 260; i++) {
-      const g = 70 + Math.round(rng() * 90)
-      ctx.fillStyle = `rgb(${g},${g},${g})`
-      ctx.fillRect(64 + rng() * 56, rng() * 120, 2 + rng() * 5, 1 + rng() * 3)
+    for (let i = 0; i < 520; i++) {
+      ctx.fillStyle = `rgba(140,150,210,${(0.03 + rng() * 0.1).toFixed(3)})`
+      ctx.fillRect(128 + rng() * 112, rng() * 240, 3 + rng() * 9, 2 + rng() * 5)
     }
-    // Four large blocks at distinct reflectivity.
-    ctx.fillStyle = '#a8a8a8'
-    ctx.fillRect(8, 64, 48, 56)
-    ctx.fillStyle = '#909090'
-    ctx.fillRect(64, 64, 56, 24)
+    // Four large blocks outlined at distinct reflectivity.
+    ctx.strokeStyle = 'rgba(170,180,235,0.18)'
+    ctx.lineWidth = 2
+    ctx.strokeRect(16, 128, 96, 112)
+    ctx.strokeRect(128, 128, 112, 48)
+    ctx.strokeRect(12, 12, 104, 104)
+    ctx.fillStyle = 'rgba(120,130,200,0.07)'
+    ctx.fillRect(16, 128, 96, 112)
   }
   const texture = new CanvasTexture(canvas)
   texture.needsUpdate = true

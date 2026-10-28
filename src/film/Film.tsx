@@ -169,10 +169,34 @@ export function Film() {
                   className="grid gap-6 py-12 md:grid-cols-2"
                 >
                   <div>
-                    <p className="kicker">{layer.kicker}</p>
+                    <p className="kicker">
+                      {String(i + 1).padStart(2, '0')} / {TEARDOWN_COPY.length} · {layer.name}
+                    </p>
                     <h2 className="display-lg mt-3">{layer.headline}</h2>
-                    <p className="lede mt-4">{layer.body}</p>
-                    <p className="spec-tech mt-3">{layer.figure}</p>
+                    <p className="lede mt-4">{layer.intro}</p>
+                    <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-(--color-border-hairline) pt-5">
+                      {layer.stats.map((stat) => (
+                        <div key={stat.label} className="flex flex-col-reverse">
+                          <dt className="mt-1 text-sm text-(--color-dim)">{stat.label}</dt>
+                          <dd className="text-2xl font-semibold tracking-tight tabular-nums">
+                            {stat.value}
+                            {stat.unit !== '' && (
+                              <span className="ml-1 text-sm font-medium text-(--color-dim)">
+                                {stat.unit}
+                              </span>
+                            )}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <ul className="mt-6 space-y-2 text-sm">
+                      {layer.callouts.map((callout) => (
+                        <li key={callout.key}>
+                          <span className="font-medium">{callout.title}.</span>{' '}
+                          <span className="text-(--color-dim)">{callout.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                   <div className="flex justify-center">
                     <PhoneFrame

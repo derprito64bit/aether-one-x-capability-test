@@ -1,61 +1,47 @@
 import { describe, expect, it } from 'vitest'
-import * as THREE from 'three'
-import { layoutCallouts, type CalloutDef } from './callouts.ts'
+import { calloutReveal, resolveColumn, type ColumnLabel } from './callouts.ts'
 
-const DEFS: CalloutDef[] = [
-  { partId: 'die', title: 'Die', body: '3 nm', priority: 1 },
-  { partId: 'cell', title: 'Cell', body: '4000 mAh', priority: 2 },
-]
+const labels = (...ys: number[]): ColumnLabel[] => ys.map((y) => ({ y, h: 40 }))
 
-function camera(): THREE.PerspectiveCamera {
-  const cam = new THREE.PerspectiveCamera(24, 16 / 9, 0.01, 10)
-  cam.position.set(0, 0, 0.62)
-  cam.lookAt(0, 0, 0)
-  cam.updateMatrixWorld(true)
-  return cam
-}
+describe('resolveColumn', () => {
+  it('leaves labels with room at their anchor heights', () => {
+    const column = labels(300, 100, 500)
+    resolveColumn(column, 0, 900, 8)
+    expect(column.map((l) => l.y)).toEqual([100, 300, 500])
+  })
 
-describe('layoutCallouts', () => {
-  it('projects anchors to screen pixels', () => {
-    const worlds = new Map([
-      ['die', new THREE.Vector3(0, 0, 0)],
-      ['cell', new THREE.Vector3(0, -0.05, 0)],
-    ])
-    const layouts = layoutCallouts(DEFS, worlds, camera(), 1440, 900)
-    expect(layouts).toHaveLength(2)
-    for (const layout of layouts) {
-      expect(layout.visible).toBe(true)
-      expect(layout.x).toBeGreaterThan(40)
-      expect(layout.x).toBeLessThan(1400)
+  it('pushes overlapping labels apart by the gap', () => {
+    const column = labels(200, 210, 215)
+    resolveColumn(column, 0, 900, 8)
+    for (let i = 1; i < column.length; i++) {
+      const prev = column[i - 1]
+      const cur = column[i]
+      expect((cur?.y ?? 0) - ((prev?.y ?? 0) + (prev?.h ?? 0))).toBeGreaterThanOrEqual(8)
     }
-    // Cell sits below die on screen.
-    const die = layouts.find((l) => l.partId === 'die')
-    const cell = layouts.find((l) => l.partId === 'cell')
-    expect(cell?.y).toBeGreaterThan(die?.y ?? 0)
+    expect(column[0]?.y).toBe(200)
   })
 
-  it('culls behind-camera and off-screen anchors', () => {
-    const worlds = new Map([
-      ['die', new THREE.Vector3(0, 0, 2)],
-      ['cell', new THREE.Vector3(50, 50, 0)],
-    ])
-    const layouts = layoutCallouts(DEFS, worlds, camera(), 1440, 900)
-    expect(layouts.every((l) => !l.visible)).toBe(true)
+  it('keeps a crowded run inside the bounds', () => {
+    const column = labels(860, 870, 880)
+    resolveColumn(column, 80, 900, 8)
+    const last = column[column.length - 1]
+    expect((last?.y ?? 0) + (last?.h ?? 0)).toBeLessThanOrEqual(900)
+    expect(column[0]?.y ?? 0).toBeGreaterThanOrEqual(80)
+    for (let i = 1; i < column.length; i++) {
+      expect(column[i]?.y ?? 0).toBeGreaterThan(column[i - 1]?.y ?? 0)
+    }
   })
+})
 
-  it('hides the lower-priority label on collision', () => {
-    const worlds = new Map([
-      ['die', new THREE.Vector3(0, 0, 0)],
-      ['cell', new THREE.Vector3(0.0005, 0.0005, 0)],
-    ])
-    const layouts = layoutCallouts(DEFS, worlds, camera(), 1440, 900)
-    const visible = layouts.filter((l) => l.visible)
-    expect(visible).toHaveLength(1)
-    expect(visible[0]?.partId).toBe('die')
-  })
-
-  it('hides unknown parts without throwing', () => {
-    const layouts = layoutCallouts(DEFS, new Map(), camera(), 1440, 900)
-    expect(layouts.every((l) => !l.visible)).toBe(true)
+describe('calloutReveal', () => {
+  it('staggers labels in order and follows focus out', () => {
+    expect(calloutReveal(0.2, 0, 1)).toBe(0)
+    expect(calloutReveal(0.5, 0, 1)).toBe(1)
+    // The fourth label is still arriving when the first is fully in.
+    expect(calloutReveal(0.36, 0, 1)).toBe(1)
+    expect(calloutReveal(0.36, 3, 1)).toBe(0)
+    expect(calloutReveal(0.7, 3, 1)).toBe(1)
+    // Everything leaves with the part.
+    expect(calloutReveal(0.7, 0, 0.25)).toBeCloseTo(0.25, 5)
   })
 })

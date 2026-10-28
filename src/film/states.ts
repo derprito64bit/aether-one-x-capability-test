@@ -117,27 +117,24 @@ export function computeFilmStates(p: number): FilmStates {
   STATES.chipLift = layerWindow(cursor, 5, 0.5, 0.5)
   STATES.battLift = ramplike(p, 0.893, 0.91, 0.92, 0.928)
   STATES.optical = ramplike(p, 0.645, 0.675, 0.715, 0.74)
-  STATES.explodeXray = ramplike(p, 0.27, 0.32, 0.48, 0.5)
+  // Screw spin rides the sandwich opening (round 05 showcase timing).
+  STATES.explodeXray = ramplike(p, 0.265, 0.283, 0.495, 0.51)
   STATES.explodeBatt = ramplike(p, 0.885, 0.893, 0.905, 0.918)
-  STATES.shellGhost = Math.min(
-    1,
-    ramplike(p, 0.25, 0.31, 0.47, 0.5) + ramplike(p, 0.875, 0.9, 0.905, 0.925),
-  )
+  // The teardown no longer ghosts the shell: the sandwich opens wide, so
+  // every shell layer shows at full opacity. Only the energy beat x-rays.
+  STATES.shellGhost = ramplike(p, 0.875, 0.9, 0.905, 0.925)
   STATES.shellSplit = ramplike(p, 0.29, 0.34, 0.465, 0.5)
   STATES.internalOpacity = Math.min(
     1,
-    ramplike(p, 0.26, 0.31, 0.485, 0.505) + ramplike(p, 0.88, 0.9, 0.905, 0.93),
+    ramplike(p, 0.262, 0.27, 0.5, 0.512) + ramplike(p, 0.88, 0.9, 0.905, 0.93),
   )
   STATES.chipFocus = layerWindow(cursor, 5, 0.5, 0.5)
-  STATES.subjectDim = Math.min(
-    1,
-    ramplike(p, 0.39, 0.42, 0.46, 0.485) + ramplike(p, 0.893, 0.905, 0.92, 0.928),
-  )
+  STATES.subjectDim = ramplike(p, 0.893, 0.905, 0.92, 0.928)
   STATES.energy = ramplike(p, 0.885, 0.9, 0.91, 0.93)
   STATES.screenOn = ramplike(p, 0.03, 0.08, 1, 1)
   // Prompt B control plane. Windows overlap their neighbours rather than
   // butting them, so no second-derivative seam at handoffs.
-  STATES.explodeRadial = ramplike(p, 0.27, 0.32, 0.48, 0.5)
+  STATES.explodeRadial = ramplike(p, 0.265, 0.283, 0.495, 0.51)
   STATES.explodeOptics = ramplike(p, 0.6, 0.645, 0.7, 0.725)
   STATES.calloutOpacity = ramplike(p, 0.29, 0.33, 0.47, 0.5)
   STATES.sectionCut = 0
@@ -159,7 +156,9 @@ export function computeFilmStates(p: number): FilmStates {
   // continuous float: integer part is the current layer, fraction is local
   // progress. Everything per-layer derives from it and reverses exactly.
   STATES.layDown = ramplike(p, 0.25, 0.265, 0.5, 0.52)
-  STATES.stackSeparate = ramplike(p, 0.272, 0.295, 0.485, 0.5)
+  // Opens wide (0.265-0.283), holds the overview to 0.295, presents the
+  // ten layers (0.295-0.495), closes for the stand-up (0.495-0.51).
+  STATES.stackSeparate = ramplike(p, 0.265, 0.283, 0.495, 0.51)
   STATES.layerCursor = cursor
   return STATES
 }

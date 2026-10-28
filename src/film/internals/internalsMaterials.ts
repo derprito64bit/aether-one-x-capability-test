@@ -1,5 +1,11 @@
 import { Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial } from 'three'
 import { createDieMarkingTexture, createFloorplanTexture } from './siliconTextures.ts'
+import {
+  createBatteryLabelTexture,
+  createBoardMaskTexture,
+  createMarkAtlasTexture,
+  createPasteTexture,
+} from './showcaseTextures.ts'
 
 export interface InternalsMaterialSet {
   board: MeshStandardMaterial
@@ -21,6 +27,20 @@ export interface InternalsMaterialSet {
   dieMark: MeshBasicMaterial
   /** Floorplan detail overlay. */
   dieFloor: MeshBasicMaterial
+  /** Battery label print (round 05 showcase). */
+  label: MeshStandardMaterial
+  /** Main board rear face: solder mask, routing, silkscreen. */
+  boardMask: MeshStandardMaterial
+  /** Chip and sheet markings atlas (laser-mark gray). */
+  chipMark: MeshBasicMaterial
+  /** Thermal paste footprint on the vapour chamber. */
+  paste: MeshStandardMaterial
+  /** Ferrite shield sheet behind the coil. */
+  ferrite: MeshStandardMaterial
+  /** Pull-tab grips: white film. */
+  grip: MeshStandardMaterial
+  /** Camera module front elements: coated dark glass. */
+  lensGlass: MeshStandardMaterial
 }
 
 export const INTERNALS_KEYS = [
@@ -39,6 +59,13 @@ export const INTERNALS_KEYS = [
   'coilRing',
   'dieMark',
   'dieFloor',
+  'label',
+  'boardMask',
+  'chipMark',
+  'paste',
+  'ferrite',
+  'grip',
+  'lensGlass',
 ] as const satisfies ReadonlyArray<keyof InternalsMaterialSet>
 
 /**
@@ -83,12 +110,16 @@ export function createInternalsMaterials(dressed = false): InternalsMaterialSet 
     metalness: 0.3,
     ...transparent,
   })
+  // Polished silicon: near-black, metallic enough to carry the studio
+  // reflection, with only a faint violet emissive so the sheen reads cool.
+  // It used to glow #2f63c8 at up to 3.8x when featured, which tone-mapped
+  // to a pale translucent-looking blue sheet over the package.
   const die = new MeshStandardMaterial({
-    color: new Color('#101623'),
-    roughness: 0.2,
-    metalness: 0.6,
-    emissive: new Color('#2f63c8'),
-    emissiveIntensity: 0.7,
+    color: new Color('#0b0c12'),
+    roughness: 0.24,
+    metalness: 0.55,
+    emissive: new Color('#2a2163'),
+    emissiveIntensity: 0.18,
     ...transparent,
   })
   const cell = new MeshStandardMaterial({
@@ -161,6 +192,58 @@ export function createInternalsMaterials(dressed = false): InternalsMaterialSet 
     ...transparent,
   })
   dieFloor.opacity = 0
+  // Decals ride a polygon offset over the face they print on.
+  const decal = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }
+  const label = new MeshStandardMaterial({
+    map: createBatteryLabelTexture(),
+    roughness: 0.62,
+    metalness: 0,
+    ...decal,
+    ...transparent,
+  })
+  const boardMask = new MeshStandardMaterial({
+    map: createBoardMaskTexture(),
+    roughness: 0.42,
+    metalness: 0.15,
+    ...decal,
+    ...transparent,
+  })
+  const chipMark = new MeshBasicMaterial({
+    map: createMarkAtlasTexture(),
+    depthWrite: false,
+    ...decal,
+    ...transparent,
+  })
+  const paste = new MeshStandardMaterial({
+    map: createPasteTexture(),
+    roughness: 0.75,
+    metalness: 0.2,
+    depthWrite: false,
+    ...decal,
+    ...transparent,
+  })
+  const ferrite = new MeshStandardMaterial({
+    color: new Color('#2b2e33'),
+    roughness: 0.82,
+    metalness: 0.1,
+    side: DoubleSide,
+    ...transparent,
+  })
+  const grip = new MeshStandardMaterial({
+    color: new Color('#e9e6de'),
+    roughness: 0.7,
+    metalness: 0,
+    side: DoubleSide,
+    ...transparent,
+  })
+  const lensGlass = new MeshStandardMaterial({
+    color: new Color('#0b1222'),
+    roughness: 0.06,
+    metalness: 0.3,
+    emissive: new Color('#3b2a6e'),
+    emissiveIntensity: 0.35,
+    ...transparent,
+  })
   const set: InternalsMaterialSet = {
     board,
     trace,
@@ -177,6 +260,13 @@ export function createInternalsMaterials(dressed = false): InternalsMaterialSet 
     coilRing,
     dieMark,
     dieFloor,
+    label,
+    boardMask,
+    chipMark,
+    paste,
+    ferrite,
+    grip,
+    lensGlass,
   }
   // Named by registry key so live scene probes can identify every part.
   for (const k of INTERNALS_KEYS) set[k].name = `internals:${k}`
@@ -185,5 +275,10 @@ export function createInternalsMaterials(dressed = false): InternalsMaterialSet 
 
 /** Disposes every registry material. Safe to call once per owner. */
 export function disposeInternalsMaterials(set: InternalsMaterialSet): void {
-  for (const k of INTERNALS_KEYS) set[k].dispose()
+  for (const k of INTERNALS_KEYS) {
+    // Canvas maps (die marking, floorplan, labels, mask, atlas, paste)
+    // dispose with their material.
+    set[k].map?.dispose()
+    set[k].dispose()
+  }
 }

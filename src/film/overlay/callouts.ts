@@ -1,125 +1,157 @@
 import * as THREE from 'three'
 
 /**
- * Exploded-diagram callouts (Prompt B section 6). Labels live in HTML,
- * anchored to part world positions and projected per frame; leader lines
- * draw in one SVG layer. Text never renders in WebGL.
+ * Teardown showcase callouts. Labels live in HTML, anchored to world
+ * points the 3D side publishes and projected per frame; leader lines draw
+ * in one SVG layer. Text never renders in WebGL.
+ *
+ * Shared bridge: written inside the Canvas, read by the HTML overlay.
  */
-export interface CalloutDef {
-  /** Matches an explode.ts part id. */
-  partId: string
-  title: string
-  /** Every figure must already exist in src/data (tested). */
-  body: string
-  /** Lower hides first on collision. */
-  priority: number
-}
-
-export interface CalloutLayout {
-  partId: string
-  /** Screen pixels. */
-  x: number
-  y: number
-  /** Label offset side. */
-  side: 'left' | 'right'
-  visible: boolean
-}
-
-/** Shared bridge: written inside the Canvas, read by the HTML overlay. */
-export const calloutBridge: {
-  camera: THREE.Camera | null
-  anchors: Record<string, THREE.Group[]>
-  occluders: THREE.Object3D[]
-  canvasWidth: number
-  canvasHeight: number
-} = { camera: null, anchors: {}, occluders: [], canvasWidth: 0, canvasHeight: 0 }
+export const calloutBridge: { camera: THREE.Camera | null } = { camera: null }
 
 /**
- * Featured-layer anchor: world position published per frame by the
- * Internals driver that positions the part (overnight pointer fix). The
- * shared anchors map reads empty in dev (registration never lands), so
- * the feature pointer does not depend on it — this bridge carries plain
- * coordinates written from the driving closure, which is live by
- * construction. Zero allocation: mutated in place, never replaced.
+ * How old a bridge write may be before the overlay treats the 3D side as
+ * stopped. The canvas only stops when the film is offscreen or unmounted
+ * (the overlay is gone then too), so this is generous: software GL (CI)
+ * draws the teardown at 280-500 ms a frame, and a tight window there
+ * flickers labels off whenever the overlay ticks just before the canvas.
  */
-export const featureAnchorBridge: {
+export const BRIDGE_STALE_MS = 1500
+
+/**
+ * The director's damped teardown cursor (the one the layers move on) and
+ * when it last wrote it (ms). Mutated in place, never replaced.
+ */
+export const cursorBridge: { cursor: number; stamp: number } = {
+  cursor: 0,
+  stamp: Number.NEGATIVE_INFINITY,
+}
+
+/** One showcase anchor: a named point on the 3D model, in world space. */
+export interface ShowcaseAnchor {
+  /** Copy key, e.g. 'battery.bms' (see TEARDOWN_COPY callouts) or a layer id. */
+  key: string
   x: number
   y: number
   z: number
-  /** World half-extent of the featured part (largest box half-size). */
-  radius: number
-  /** World position of the stack centre, so the label can face away from it. */
-  sx: number
-  sy: number
-  sz: number
-  partId: string | null
-  valid: boolean
-  /** The director's damped teardown cursor, and when it last wrote it (ms). */
-  cursor: number
-  cursorStamp: number
-} = {
-  x: 0,
-  y: 0,
-  z: 0,
-  radius: 0,
-  sx: 0,
-  sy: 0,
-  sz: 0,
-  partId: null,
-  valid: false,
-  cursor: 0,
-  cursorStamp: Number.NEGATIVE_INFINITY,
+  /** False when the point is not presentable (hidden, behind, not built). */
+  on: boolean
 }
+
+/**
+ * Fallback slots (viewport fractions) for when the overlay has not measured
+ * yet, e.g. in unit tests: right of a 1440px-wide copy column between two
+ * label columns, or the top half of a phone above its copy card.
+ */
+export const DEFAULT_SLOT_LANDSCAPE = { x0: 0.48, x1: 0.74, y0: 0.1, y1: 0.88 }
+export const DEFAULT_SLOT_PORTRAIT = { x0: 0.06, x1: 0.94, y0: 0.09, y1: 0.5 }
+
+/** Pre-allocated slots: the 3D side writes in place every frame, never allocates. */
+export const SHOWCASE_PART_SLOTS = 8
+
+const anchorSlot = (): ShowcaseAnchor => ({ key: '', x: 0, y: 0, z: 0, on: false })
+
+/**
+ * Teardown showcase bridge (one part at a time). Written every frame by the
+ * 3D side (FilmDirector / Internals), read by the overlay (Callouts,
+ * FilmOverlay) through calloutBridge.camera:
+ * - `layer`: the layer being presented (0..9, physical stack order), or -1.
+ * - `focus`: 0..1, how fully that layer is presented; 1 while it holds at
+ *   its hero pose beside the open stack. Copy and callouts key off this so
+ *   they agree with the 3D exactly (it follows the damped cursor).
+ * - `overview`: 0..1, the open-sandwich hold where every layer is labelled.
+ * - `parts`: the presented layer's sub-component anchors, keyed by the
+ *   callout keys in TEARDOWN_COPY.
+ * - `layers`: one anchor per layer (key = layer id) for the overview labels.
+ * - `bounds`: world AABB of the presented layer at its current pose, so
+ *   the label columns clear the part instead of covering it.
+ * - `slot` (written by the overlay, read by the 3D side): the free
+ *   rectangle the presented part must fit inside, as viewport fractions
+ *   (x left to right, y top to bottom), clear of the copy, the label
+ *   columns and the act rail. Changes on resize only, so framing stays a
+ *   pure function of progress and layout. `set` is false until measured.
+ */
+export const showcaseBridge: {
+  layer: number
+  focus: number
+  overview: number
+  parts: ShowcaseAnchor[]
+  layers: ShowcaseAnchor[]
+  slot: { x0: number; x1: number; y0: number; y1: number; set: boolean }
+  bounds: {
+    minX: number
+    minY: number
+    minZ: number
+    maxX: number
+    maxY: number
+    maxZ: number
+    on: boolean
+  }
+  /** performance.now() of the last write; 0 until the 3D side first writes. */
+  stamp: number
+} = {
+  layer: -1,
+  focus: 0,
+  overview: 0,
+  parts: Array.from({ length: SHOWCASE_PART_SLOTS }, anchorSlot),
+  layers: Array.from({ length: 10 }, anchorSlot),
+  slot: { ...DEFAULT_SLOT_LANDSCAPE, set: false },
+  bounds: { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0, on: false },
+  stamp: 0,
+}
+
+/**
+ * The cursor window is tight on purpose, unlike BRIDGE_STALE_MS: when the
+ * canvas draws slower than ~4 fps its damped cursor converges over many
+ * seconds of wall time, and copy that waited on it would trail the scroll
+ * by whole layers. There the raw cursor is the better guide.
+ */
+const CURSOR_STALE_MS = 250
 
 /**
  * The teardown cursor the overlay labels by: the director's damped cursor
- * (the one the layers move on) while the film canvas is running, else the
- * raw progress cursor (static fallback, canvas not yet mounted). Copy,
- * pointer, and motion then agree; on the raw cursor the camera chip faded
- * in before the module moved and the copy changed while it still moved.
+ * while the film canvas is running smoothly, else the raw progress cursor
+ * (static fallback, canvas not yet mounted, or too slow to follow).
+ * Copy, callouts and motion then agree.
  */
 export function overlayCursor(rawCursor: number, nowMs: number): number {
-  return nowMs - featureAnchorBridge.cursorStamp < 250 ? featureAnchorBridge.cursor : rawCursor
+  return nowMs - cursorBridge.stamp < CURSOR_STALE_MS ? cursorBridge.cursor : rawCursor
 }
 
-const scratch = new THREE.Vector3()
+/** One label in a callout column: its top edge and height, in pixels. */
+export interface ColumnLabel {
+  y: number
+  h: number
+}
 
 /**
- * Projects anchors to screen pixels with culling: behind camera,
- * off-screen (40px margin), and screen-space collision (lower priority
- * hides). Pure given the inputs; occlusion is resolved by the caller with
- * a throttled raycast. Tested in callouts.test.ts.
+ * Stacks one column of labels without overlap. Each label keeps its own
+ * height (its anchor's) where it can; overlaps push down by `gap`, and a
+ * run that overflows `max` is pushed back up from the bottom. Sorts and
+ * writes `y` in place. Pure, tested in callouts.test.ts.
  */
-export function layoutCallouts(
-  defs: CalloutDef[],
-  worldPositions: Map<string, THREE.Vector3>,
-  camera: THREE.Camera,
-  width: number,
-  height: number,
-): CalloutLayout[] {
-  const placed: CalloutLayout[] = []
-  const ordered = [...defs].sort((a, b) => a.priority - b.priority)
-  for (const def of ordered) {
-    const world = worldPositions.get(def.partId)
-    if (world === undefined) {
-      placed.push({ partId: def.partId, x: 0, y: 0, side: 'right', visible: false })
-      continue
-    }
-    scratch.copy(world).project(camera)
-    const behind = scratch.z > 1 || scratch.z < -1
-    const x = ((scratch.x + 1) / 2) * width
-    const y = ((1 - scratch.y) / 2) * height
-    let visible = !behind && x > 40 && x < width - 40 && y > 40 && y < height - 40
-    if (visible) {
-      for (const other of placed) {
-        if (!other.visible) continue
-        if (Math.abs(other.x - x) < 96 && Math.abs(other.y - y) < 44) {
-          visible = false
-          break
-        }
-      }
-    }
-    placed.push({ partId: def.partId, x, y, side: x > width / 2 ? 'left' : 'right', visible })
+export function resolveColumn(labels: ColumnLabel[], min: number, max: number, gap: number): void {
+  labels.sort((a, b) => a.y - b.y)
+  let floor = min
+  for (const label of labels) {
+    label.y = Math.max(label.y, floor)
+    floor = label.y + label.h + gap
   }
-  return placed
+  let ceiling = max
+  for (let i = labels.length - 1; i >= 0; i--) {
+    const label = labels[i]
+    if (label === undefined) continue
+    if (label.y + label.h > ceiling) label.y = Math.max(min, ceiling - label.h)
+    ceiling = label.y - gap
+  }
+}
+
+/**
+ * Callout stagger: the k-th label of a held layer arrives a beat after
+ * the one before it, then all leave with the part. `d` is the layer
+ * cursor fraction (0..1), `focus` the bridge's presentation strength.
+ */
+export function calloutReveal(d: number, k: number, focus: number): number {
+  const start = 0.24 + 0.07 * k
+  return focus * Math.min(1, Math.max(0, (d - start) / 0.08))
 }

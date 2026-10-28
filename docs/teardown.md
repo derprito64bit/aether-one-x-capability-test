@@ -9,6 +9,82 @@ gone — every layer rides its slot, the camera tours the open stack. The
 only rotation left is the camera layer turning lens-up during its own
 beat, out beside the stack, so its decorated face meets the tour camera.
 
+## Round 05 showcase (2026-10-28): one part at a time
+
+Owner direction: the open stack was overwhelming and never focused on one
+part. The teardown is now a showcase (`src/film/teardown/showcase.ts`,
+manifest in `showcaseLayers.ts`):
+
+- **Wide sandwich.** The phone lies down turned a quarter in its own plane
+  (keys `rz = -PI/2`), long axis across the frame, and the stack opens to a
+  34mm gap (was 8.5mm) over p 0.265-0.283. Seen from the rig camera no two
+  layers' outlines overlap more than 25% (asserted on every vertex).
+- **Overview hold** p 0.283-0.295 (tour cursor u < 0): all ten layers at
+  full opacity, framed right of the copy (landscape) or in the top half
+  (portrait).
+- **Tour** u = (p - 0.295) / 0.02, unchanged mapping (e2e cards at
+  p = 0.30 + 0.02 i). Layer i owns u in [i, i + 1), d = u - i: arrive
+  d 0-0.2 (slides out of the footprint in its own plane toward the camera,
+  then flies to its hero pose, turning only in flight), hold 0.2-0.8,
+  leave 0.8-1. Focus is 0 at d 0.12, 1 from 0.24 to 0.78, 0 by 0.9. Only
+  one layer is ever out of its slot (asserted). Every other layer dims to
+  15% (`ShowcaseDimmer`: per-layer material clones, synced each frame).
+- **Hero pose.** Solved in front of the rig camera: the layer's projected
+  subject box is centred in and fitted to `showcaseBridge.slot`, the free
+  rectangle the overlay publishes on resize (defaults
+  `DEFAULT_SLOT_LANDSCAPE` / `_PORTRAIT` until it has measured), capped at
+  60% of the height (landscape) or 42% (portrait). Detailed face to camera
+  with a 3/4 tilt toward the copy (rear-facing layers flip: midframe,
+  logic board, silicon, coil, camera, rear panel).
+- **Rig camera.** While the stack is open the director blends to a solved
+  camera (fixed 14-degree look, distance that fits the stack in the
+  region); it slides the dimmed stack aside during the tour and rides
+  35% of the way toward the presented layer's slot.
+- **Bridge.** `writeShowcaseBridge` publishes layer, focus, overview, the
+  presented layer's sub-component anchors (on their visible faces), one
+  left-edge anchor per layer, and the presented layer's world AABB.
+- **Sub-components** built for the showcase: display flex tail with driver
+  IC and connector (unfolds below the panel while presented) and the panel
+  punch cutout; open midframe rails with a mid-plate and machined ribs;
+  battery label, protection board with nickel tabs, flex and BTB
+  connector, stretch-release pull tabs; board solder mask/routing/
+  silkscreen and chip markings, USB-C receptacle shell; SoC caps on the
+  substrate border; vapour chamber seam, fill tube, and paste footprint;
+  graphite print; ferrite sheet and three-turn NFC; LRA with ears and
+  flex; speaker grille; camera voice-coil cans, barrels, coated elements,
+  sensor boards, periscope prism window, ToF emitter and receiver.
+
+The camera-layer beat (slide, lens-up turn, module rising to the
+housings) and the tour aim offset are retired: the camera bump stays
+bonded to the rear panel, and the internal camera modules are their own
+presented layer.
+
+### Overlay side (copy, callouts, pacing)
+
+- **Copy** (`TEARDOWN_COPY` in `chapters.ts`): per layer a name, headline,
+  two-sentence intro, four capabilities and 3-4 callouts whose keys match
+  the 3D anchors. Figures come from `src/data` (`TEARDOWN_FACTS` for the
+  ones with no other home) and `chapters.test.ts` checks the counts against
+  the model (screws, coil turns, BGA grid, chamber size, ppi, Wh).
+- **Cards** (`FilmOverlay.tsx`): the intro card holds over the opening and
+  overview; each layer card turns over with its part (in d -0.04..0.04,
+  out 0.86..0.96, never two at once) and staggers headline, intro and
+  capabilities off one `--reveal` variable, so it scrubs both ways.
+- **Callouts** (`Callouts.tsx`): project the bridge anchors through the
+  live camera. Two modes chosen on resize: `aside` (label columns beside
+  the part, clear of its projected `bounds`) when the frame leaves the part
+  a real slot, else `over` (title chips beside each hotspot). Labels
+  stagger in (`calloutReveal`), leaders draw out from the hotspot, columns
+  never overlap (`resolveColumn`). The overview names every layer, or
+  shows numbered markers keyed to a legend in the intro card when names do
+  not fit (phones). The overlay writes `showcaseBridge.slot` from the same
+  measurements, so part and labels share one layout.
+- **Pacing** (`tour.ts`): the tour span is read off `cursorAt`. A scroll
+  that comes to rest mid-move settles into the next hold in the direction
+  of travel (only after real wheel/touch/key input, never while playing or
+  under reduced motion); Play runs the opening and overview in about 5 s
+  and holds each layer about 4 s.
+
 ## How it works
 
 - Ten layers front to back (`src/film/teardown/layers.ts`), wired to

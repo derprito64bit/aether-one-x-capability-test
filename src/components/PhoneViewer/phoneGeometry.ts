@@ -7,6 +7,7 @@ import {
   CORNER_R,
   CHAMFER,
   DIM,
+  MIDFRAME,
   RING_BASE_Z,
   RING_DEPTH,
 } from './phoneDimensions.ts'
@@ -595,21 +596,129 @@ export function fitPlanarUVs(geometry: THREE.BufferGeometry): void {
   uv.needsUpdate = true
 }
 
+/** Midframe rail opening: the body outline inset by the rail wall. */
+export const FRAME_BODY_OPENING = {
+  halfW: DIM.w / 2 - MIDFRAME.wall,
+  halfH: DIM.h / 2 - MIDFRAME.wall,
+  r: CORNER_R - MIDFRAME.wall,
+} as const
+
 /**
- * Frame body: straight rounded-rect spine from `backFaceZ` (the ceramic
- * panel's inner face) to the ring base, so it tiles flush with the front
- * ring and the rear rim (createRearRimGeometry), which carry the chamfers.
- * Depth derives from the planes, not a const.
+ * Frame body (round 05): the rails as an explicit open annulus from the
+ * rear panel's inner face to the ring lid, wall MIDFRAME.wall thick, so
+ * the parts mounted inside the frame show from the rear when the midframe
+ * is presented (it was one solid extrusion that buried every internal).
+ * Outer wall, opening wall, and both annular caps, non-indexed so
+ * assignRailGroups can split it per rail. The opening is tagged for the
+ * layer-stack test's annulus check.
  */
 export function createFrameBodyGeometry(backFaceZ: number, coarse = false): THREE.BufferGeometry {
-  const shape = bodyOutlineShape(DIM.w / 2, DIM.h / 2, CORNER_R, coarse ? 32 : 64)
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: Math.max(0.0001, RING_BASE_Z - backFaceZ),
-    bevelEnabled: false,
-    curveSegments: coarse ? 10 : 20,
-    steps: 1,
-  })
-  geometry.translate(0, 0, backFaceZ)
+  const geometry = createOutlineAnnulusGeometry(
+    { halfW: DIM.w / 2, halfH: DIM.h / 2, r: CORNER_R },
+    FRAME_BODY_OPENING,
+    backFaceZ,
+    RING_BASE_Z,
+    coarse ? 24 : 48,
+  )
+  geometry.userData.annulusOpening = FRAME_BODY_OPENING
+  return geometry
+}
+
+/** A rounded-rect outline (half extents and corner radius, metres). */
+export interface OutlineRect {
+  halfW: number
+  halfH: number
+  r: number
+}
+
+/**
+ * Explicit annulus between two body-style outlines (circular corners, the
+ * same sampling as the glass and body slabs), from zBack to zFront: outer
+ * wall, opening wall, and both caps, non-indexed, with world-unit UVs
+ * (caps in xy, walls along z) like ExtrudeGeometry's. Explicit because
+ * earcut drops dense holes, and because roundedRectPath's quadratic
+ * corners bulge up to 0.06r past a circular corner.
+ */
+export function createOutlineAnnulusGeometry(
+  outerRect: OutlineRect,
+  innerRect: OutlineRect,
+  zBack: number,
+  zFront: number,
+  perQuadrant: number,
+): THREE.BufferGeometry {
+  const total = perQuadrant * 4
+  const outer = bodyOutlinePoints(outerRect.halfW, outerRect.halfH, outerRect.r, perQuadrant)
+  const inner = bodyOutlinePoints(innerRect.halfW, innerRect.halfH, innerRect.r, perQuadrant)
+  const zB = zBack
+  const zF = zFront
+  const positions: number[] = []
+  const normals: number[] = []
+  const uvs: number[] = []
+  const tri = (a: number[], b: number[], c: number[], n: number[]): void => {
+    // Wind to match the intended normal.
+    const ux = (b[0] ?? 0) - (a[0] ?? 0)
+    const uy = (b[1] ?? 0) - (a[1] ?? 0)
+    const uz = (b[2] ?? 0) - (a[2] ?? 0)
+    const vx = (c[0] ?? 0) - (a[0] ?? 0)
+    const vy = (c[1] ?? 0) - (a[1] ?? 0)
+    const vz = (c[2] ?? 0) - (a[2] ?? 0)
+    const cx = uy * vz - uz * vy
+    const cy = uz * vx - ux * vz
+    const cz = ux * vy - uy * vx
+    const flip = cx * (n[0] ?? 0) + cy * (n[1] ?? 0) + cz * (n[2] ?? 0) < 0
+    // World-unit UVs like ExtrudeGeometry's: caps in xy, walls along z,
+    // so the rail brush maps tile exactly as they did on the solid body.
+    const cap = Math.abs(n[2] ?? 0) > 0.5
+    const alongY = Math.abs(n[0] ?? 0) >= Math.abs(n[1] ?? 0)
+    for (const v of flip ? [a, c, b] : [a, b, c]) {
+      positions.push(v[0] ?? 0, v[1] ?? 0, v[2] ?? 0)
+      normals.push(n[0] ?? 0, n[1] ?? 0, n[2] ?? 0)
+      if (cap) uvs.push(v[0] ?? 0, v[1] ?? 0)
+      else uvs.push(alongY ? (v[1] ?? 0) : (v[0] ?? 0), 1 - (v[2] ?? 0))
+    }
+  }
+  const quad = (a: number[], b: number[], c: number[], d: number[], n: number[]): void => {
+    tri(a, b, c, n)
+    tri(a, c, d, n)
+  }
+  const outward = (loop: Array<[number, number]>, i: number): [number, number] => {
+    const p = loop[i] as [number, number]
+    // Average of the neighbouring edge normals, pointing away from centre.
+    const prev = loop[(i - 1 + loop.length) % loop.length] as [number, number]
+    const next = loop[(i + 1) % loop.length] as [number, number]
+    let nx = next[1] - prev[1]
+    let ny = -(next[0] - prev[0])
+    const m = Math.hypot(nx, ny) || 1
+    nx /= m
+    ny /= m
+    if (nx * p[0] + ny * p[1] < 0) {
+      nx = -nx
+      ny = -ny
+    }
+    return [nx, ny]
+  }
+  for (let i = 0; i < total; i++) {
+    const j = (i + 1) % total
+    const a = outer[i] as [number, number]
+    const b = outer[j] as [number, number]
+    const c = inner[i] as [number, number]
+    const d = inner[j] as [number, number]
+    const na = outward(outer, i)
+    const nb = outward(outer, j)
+    const n0: [number, number] = [(na[0] + nb[0]) / 2, (na[1] + nb[1]) / 2]
+    const ma = outward(inner, i)
+    const mb = outward(inner, j)
+    const m0: [number, number] = [-(ma[0] + mb[0]) / 2, -(ma[1] + mb[1]) / 2]
+    // Outer wall, opening wall, front cap, rear cap.
+    quad([a[0], a[1], zB], [b[0], b[1], zB], [b[0], b[1], zF], [a[0], a[1], zF], [n0[0], n0[1], 0])
+    quad([c[0], c[1], zB], [c[0], c[1], zF], [d[0], d[1], zF], [d[0], d[1], zB], [m0[0], m0[1], 0])
+    quad([a[0], a[1], zF], [b[0], b[1], zF], [d[0], d[1], zF], [c[0], c[1], zF], [0, 0, 1])
+    quad([a[0], a[1], zB], [c[0], c[1], zB], [d[0], d[1], zB], [b[0], b[1], zB], [0, 0, -1])
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
   return geometry
 }
 

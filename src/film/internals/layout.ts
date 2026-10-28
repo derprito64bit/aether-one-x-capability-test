@@ -1,4 +1,4 @@
-import { MODULE } from '../../components/PhoneViewer/phoneDimensions.ts'
+import { MIDFRAME, MODULE } from '../../components/PhoneViewer/phoneDimensions.ts'
 
 /**
  * Internal component manifest (Prompt C section 2). Single source of truth
@@ -38,7 +38,9 @@ export const SUB_BOARD = {
   thickness: 0.0008,
   cx: 0,
   cy: -0.072,
-  cz: -0.0012,
+  // Front face 1mm behind the mid-plate: the bottom midframe screws seat
+  // on the plate over it.
+  cz: -0.0015,
 } as const
 
 /** Board-to-board flex, routed up the left edge, outboard of the cell. */
@@ -113,12 +115,56 @@ export const SHIELD_CANS: ShieldCanDef[] = [
 export const BATTERY_CELL = {
   w: 0.0595,
   h: 0.0695,
-  thickness: 0.0042,
+  // Front face 0.05mm shy of the display's back, so the printed label can
+  // sit on it without touching the panel.
+  thickness: 0.00416,
   cx: 0,
   cy: -0.01675,
-  cz: -0.0005,
+  cz: -0.00052,
   tabX: 0.019,
   tabY: 0.0165, // tabs ride the top edge, never float above it or onto the board
+} as const
+
+/**
+ * Battery sub-components (round 05 showcase). The protection board (BMS)
+ * rides the cell's top edge in front of the main board (its front face is
+ * 0.7mm), the flex runs up to a board-to-board connector, and two
+ * stretch-release pull tabs run under the cell and out past its bottom
+ * edge, where the grips show.
+ */
+const CELL_TOP = BATTERY_CELL.cy + BATTERY_CELL.h / 2
+const CELL_REAR = BATTERY_CELL.cz - BATTERY_CELL.thickness / 2
+export const BATTERY_PARTS = {
+  bms: {
+    x: 0,
+    y: CELL_TOP + 0.0023,
+    w: 0.036,
+    h: 0.0042,
+    z: 0.00105,
+    depth: 0.0003,
+    zFront: 0.0014,
+  },
+  connector: {
+    x: -0.021,
+    y: CELL_TOP + 0.0082,
+    w: 0.0062,
+    h: 0.0026,
+    z: 0.0011,
+    depth: 0.0005,
+    flexW: 0.004,
+    zFront: 0.00135,
+  },
+  tabs: {
+    // Inboard of the speaker, ending 0.2mm short of the haptic.
+    xs: [-0.008, 0.008],
+    w: 0.0075,
+    yTop: BATTERY_CELL.cy - 0.02,
+    yBottom: BATTERY_CELL.cy - BATTERY_CELL.h / 2 - 0.0038,
+    gripY: BATTERY_CELL.cy - BATTERY_CELL.h / 2 - 0.0019,
+    z: CELL_REAR - 0.00005,
+    depth: 0.0001,
+    zFront: CELL_REAR,
+  },
 } as const
 
 /**
@@ -147,6 +193,13 @@ export const NFC = {
 } as const
 
 /**
+ * Ferrite shield sheet: a rounded square in front of the coil (between it
+ * and the graphite), wide enough to back the NFC ring too. Five microns:
+ * it lives in the 15-micron gap between the coil and the graphite.
+ */
+export const FERRITE = { half: 0.027, r: 0.004, z: -0.0029495, depth: 0.000005 } as const
+
+/**
  * Vapor chamber over the SoC, behind the shield lids, spanning the board
  * (y 19 to 63mm). It used to run down over the battery top, which put it
  * inside the cell and inside the shield cans.
@@ -168,6 +221,28 @@ export const GRAPHITE = {
   cx: 0,
   cy: 0.01,
   cz: -0.00288,
+} as const
+
+/**
+ * Thermal contact: the paste footprint printed on the chamber's front face
+ * over the SoC (the can lid sits 0.02mm in front, so it is a film).
+ */
+export const THERMAL_PAD = {
+  x: -0.013,
+  y: 0.0345,
+  size: 0.0135,
+  z: VAPOR_CHAMBER.cz + VAPOR_CHAMBER.thickness / 2 + 0.00001,
+} as const
+
+/** SoC stack planes (silicon layer), rear to front, plus the die's showcase lift. */
+const SOC_REAR_Z = MAIN_BOARD.cz - MAIN_BOARD.thickness / 2
+export const SOC_STACK = {
+  substrateZ: SOC_REAR_Z - 0.0004,
+  bgaZ: SOC_REAR_Z - 0.0009,
+  dieZ: SOC_REAR_Z - 0.0015,
+  dieLift: 0.003,
+  /** Decoupling cap rows: centre offset from the package centre. */
+  capInset: 0.0074,
 } as const
 
 export interface MechPartDef {
@@ -193,9 +268,12 @@ export const MECH_Z = -0.0012
  */
 export const MECH: MechPartDef[] = [
   // X-axis linear resonant actuator. Rectangular, heavy-looking, flex tail.
-  { id: 'haptic', x: -0.017, y: -0.0585, w: 0.024, h: 0.009, d: 0.003 },
-  { id: 'speaker', x: 0.02, y: -0.0585, w: 0.018, h: 0.011, d: 0.0036 },
-  { id: 'earpiece', x: 0, y: 0.072, w: 0.012, h: 0.004, d: 0.0025 },
+  // Haptic, speaker, and earpiece mount on the mid-plate's rear face
+  // (round 05): 2.4mm deep, from the plate (-0.6mm) to the panel's inner
+  // face, so none pokes through the plate.
+  { id: 'haptic', x: -0.0155, y: -0.0595, w: 0.024, h: 0.008, d: 0.0024, z: -0.0018 },
+  { id: 'speaker', x: 0.021, y: -0.0585, w: 0.018, h: 0.011, d: 0.0024, z: -0.0018 },
+  { id: 'earpiece', x: 0, y: 0.072, w: 0.012, h: 0.004, d: 0.0022, z: -0.0019 },
   { id: 'port-block', x: 0, y: -0.0771, w: 0.0084, h: 0.0042, d: 0.0026, z: 0 },
 ]
 
@@ -217,6 +295,8 @@ export const SCREWS = [
   { x: 0.029, y: -0.072 },
 ] as const
 export const SCREW = { headD: 0.0016, headDepth: 0.0004, driveD: 0.0009 } as const
+/** Screw seat plane: heads sit on the mid-plate's rear face. */
+export const SCREW_Z = MIDFRAME.screwSeatZ
 
 /**
  * Internal camera housing: the A2 module mounts to the main board and

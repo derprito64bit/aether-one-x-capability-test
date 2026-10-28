@@ -12,9 +12,15 @@ import {
 } from '../components/PhoneViewer/phoneMaterials.ts'
 import { FilmDirector, type FilmRefs } from './FilmDirector.tsx'
 import { Internals, type InternalsControl } from './internals/Internals.tsx'
-import { createInternalsMaterials } from './internals/internalsMaterials.ts'
+import {
+  createInternalsMaterials,
+  disposeInternalsMaterials,
+} from './internals/internalsMaterials.ts'
 import { LiveScreen, useScreenRefs } from './LiveScreen.tsx'
 import { Stage } from './stage/Stage.tsx'
+import { LAYER_GAP } from './teardown/layers.ts'
+import { createLayerPoses } from './teardown/showcase.ts'
+import { ShowcaseDimmer } from './teardown/ShowcaseDimmer.tsx'
 import { calloutBridge } from './overlay/callouts.ts'
 import type { MotionValue } from 'motion/react'
 
@@ -37,6 +43,8 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
     [],
   )
   const internalsMaterials = useMemo(() => createInternalsMaterials(), [])
+  // Internals materials and their canvas maps die with the scene.
+  useEffect(() => () => disposeInternalsMaterials(internalsMaterials), [internalsMaterials])
   const screenTexture = useMemo(() => {
     const texture = new THREE.CanvasTexture(
       (() => {
@@ -74,9 +82,12 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
     shieldLift: 0,
     coilRing: 0,
     stackSeparate: 0,
-    layerCursor: 0,
-    featureCursor: 0,
-    teardownGap: 0.0085,
+    poses: createLayerPoses(),
+    showcaseLayer: -1,
+    showcaseFocus: 0,
+    dieLift: 0,
+    layerAlpha: new Float32Array(11).fill(1),
+    teardownGap: LAYER_GAP,
     reducedMotion: false,
   })
   const opticsSeparation = useRef<Record<string, THREE.Group | null>>({})
@@ -196,28 +207,18 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
         timeRef={screen.timeRef}
       />
       <AdaptiveDpr cap={1.75} />
-      <CalloutBridge refs={refs} />
+      <CalloutBridge />
       <FilmDirector progress={progress} materials={materials} refs={refs} />
+      <ShowcaseDimmer refs={refs} />
     </group>
   )
 }
 
-/**
- * Feeds the HTML callout layer: the live camera plus the shell groups as
- * occlusion casters. Zero allocation after mount.
- */
-function CalloutBridge({ refs }: { refs: FilmRefs }) {
+/** Feeds the HTML callout layer the live camera it projects anchors with. */
+function CalloutBridge() {
   const camera = useThree((state) => state.camera)
-  const occluders = useMemo<THREE.Object3D[]>(() => {
-    calloutBridge.occluders = []
-    return calloutBridge.occluders
-  }, [])
   useFrame(() => {
     calloutBridge.camera = camera
-    occluders.length = 0
-    for (const ref of [refs.frame, refs.back, refs.glass]) {
-      if (ref.current !== null) occluders.push(ref.current)
-    }
   })
   return null
 }

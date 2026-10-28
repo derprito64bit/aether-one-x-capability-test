@@ -304,6 +304,27 @@ export const BATTERY = {
   } as const,
 }
 
+/**
+ * Figures the teardown showcase quotes that have no other home. Counts
+ * match the model (chapters.test.ts checks them against layout.ts): eight
+ * midframe screws, an 18-turn coil, a 14 x 14 BGA, a 48 x 44 mm chamber.
+ */
+export const TEARDOWN_FACTS = {
+  layers: 10,
+  /** hypot(3200, 1440) / 6.7 in, rounded. */
+  ppi: 524,
+  glassMm: 0.6,
+  /** Front reflectance with the anti-reflective layer. */
+  reflectancePct: 1.4,
+  screws: 8,
+  cellWh: 15.2,
+  cellCm3: 19,
+  coilTurns: 18,
+  bgaGrid: 14,
+  chamberMm: [48, 44] as const,
+  storageType: 'UFS 4.1',
+}
+
 export type UsageKey = keyof typeof BATTERY.drainPerHour
 export type UsageHours = Record<UsageKey, number>
 

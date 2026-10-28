@@ -10,11 +10,14 @@ describe('film states', () => {
     expect(s.chipFocus).toBe(0)
   })
 
-  it('fully ghosts the shell and shows internals mid x-ray', () => {
+  it('shows the shell layers solid and the internals in the open sandwich', () => {
+    // Round 05 showcase: the stack opens wide, so the shell no longer
+    // ghosts in the teardown; only the energy beat x-rays it.
     const s = computeFilmStates(0.33)
-    expect(s.shellGhost).toBeGreaterThan(0.9)
+    expect(s.shellGhost).toBe(0)
     expect(s.internalOpacity).toBeGreaterThan(0.9)
     expect(s.explodeXray).toBeGreaterThan(0.5)
+    expect(computeFilmStates(0.9).shellGhost).toBeGreaterThan(0.9)
   })
 
   it('restores the shell before the camera act', () => {
