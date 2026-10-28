@@ -60,11 +60,15 @@ jobs:
       # Performance is measured, not asserted: CI renders WebGL through
       # SwiftShader (software GL), so a perf score would test the CPU
       # rasterizer, not the site. Real-GPU numbers are the M10 trace.
+      # --disable-full-page-screenshot: capturing the WebGL page in software GL
+      # timed out (Page.captureScreenshot) and crashed the run; the asserted
+      # categories do not need it.
       - run: >
           npx lighthouse http://127.0.0.1:4173/
           --preset=desktop --quiet --chrome-flags="--headless --no-sandbox"
           --output=json --output-path=/tmp/lh.json
           --only-categories=accessibility,best-practices,seo
+          --disable-full-page-screenshot
       - run: >
           node -e "const r=require('/tmp/lh.json');
           const c=r.categories;
