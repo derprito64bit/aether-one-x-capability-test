@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lensSeat, lensSpecs, moduleCenter } from './CameraAssembly.tsx'
+import { lensSeat, lensSpecs, moduleCenter } from './cameraLayout.ts'
 import {
   COLLAR,
   FLASH_ARC,

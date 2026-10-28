@@ -1,6 +1,12 @@
+import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
+import { ITEM } from './motion.ts'
 
-/** Mono uppercase kicker opening each chapter. */
+/** Topic label opening each chapter, in the one accent. */
 export function Kicker({ children }: { children: ReactNode }) {
-  return <p className="kicker">{children}</p>
+  return (
+    <motion.p className="kicker text-(--color-aether-strong)" variants={ITEM}>
+      {children}
+    </motion.p>
+  )
 }

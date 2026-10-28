@@ -11,18 +11,25 @@ import { STORAGE_KEYS } from './acts/storage.ts'
 import { TEARDOWN_KEYS } from './acts/teardown.ts'
 import type { ActDef, FilmKey } from './key.ts'
 
+/**
+ * `align` is the side of the frame the act's copy owns, so copy never sits
+ * on the product. Most acts keep the device centred (about 33-69% of the
+ * width at the battery macro); `approach` and `ai` push it left (pose px
+ * < 0) to make room, so their copy must stay on the right. The rest
+ * alternate around those two so the eye travels.
+ */
 export const ACTS: ActDef[] = [
-  { id: 'arrival', start: 0, end: 0.1, align: 'center' },
-  { id: 'settle', start: 0.1, end: 0.155, align: 'center' },
+  { id: 'arrival', start: 0, end: 0.1, align: 'left' },
+  { id: 'settle', start: 0.1, end: 0.155, align: 'left' },
   { id: 'approach', start: 0.155, end: 0.25, align: 'right' },
   { id: 'teardown', start: 0.25, end: 0.52, align: 'left' },
   { id: 'camera', start: 0.52, end: 0.72, align: 'right' },
-  { id: 'display', start: 0.72, end: 0.84, align: 'center' },
+  { id: 'display', start: 0.72, end: 0.84, align: 'left' },
   { id: 'storage', start: 0.84, end: 0.89, align: 'right' },
   { id: 'battery', start: 0.89, end: 0.93, align: 'left' },
-  { id: 'software', start: 0.93, end: 0.95, align: 'center' },
+  { id: 'software', start: 0.93, end: 0.95, align: 'left' },
   { id: 'ai', start: 0.95, end: 0.975, align: 'right' },
-  { id: 'final', start: 0.975, end: 1, align: 'center' },
+  { id: 'final', start: 0.975, end: 1, align: 'left' },
 ]
 
 /** Master keyframe list in authored order. Validated by validateTimeline. */

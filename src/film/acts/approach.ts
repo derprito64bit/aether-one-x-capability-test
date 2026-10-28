@@ -20,7 +20,10 @@ export const APPROACH_KEYS: FilmKey[] = [
     at: 0.25,
     pose: { rx: 0.1, ry: 0.6, rz: 0.02, scale: 1.26, px: -0.1, py: -0.03 },
     camera: { pos: [0.14, -0.1, 0.64], target: [0, -0.055, 0] },
-    lens: { fov: 24 },
+    // Carries a fit like its neighbours: responsive framing owns a segment
+    // only when both ends carry one, so without it the target FOV stepped
+    // 21 to 22 degrees at p 0.24 and 24 to 30 at 0.26 (fovContinuity.test).
+    lens: { fov: 24, fit: 0.55 },
     look: { exposure: 1 },
   }),
 ]

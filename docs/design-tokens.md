@@ -1,56 +1,72 @@
 # Design tokens — Aether One X v2
 
-Source of truth: `src/index.css` under `@theme`. No raw hex in components.
+Source of truth: `src/index.css` under `@theme`. No raw hex in components
+except canvas painters and 3D, which cannot read CSS variables (they cite
+the token they mirror).
+
+## Direction
+
+Porcelain studio (site overhaul, 2026-10-28). The owner asked for a cream
+room with more light; the overhaul keeps that brief and lowers the chroma,
+so the obsidian device and the one cobalt accent carry the colour instead
+of a yellow page. One theme for the whole site (light), one accent.
 
 ## Surfaces
 
-| Token     | Value     | Use             |
-| --------- | --------- | --------------- |
-| `night`   | `#efe9dc` | page background |
-| `surface` | `#f6f1e6` | cards, panels   |
-| `elev`    | `#fbf8f1` | raised          |
-| `raise`   | `#fffdf9` | topmost         |
+| Token     | Value     | Use                             |
+| --------- | --------- | ------------------------------- |
+| `night`   | `#f2f0eb` | page background                 |
+| `surface` | `#f8f7f3` | panels (`.panel`)               |
+| `elev`    | `#fcfbf8` | raised                          |
+| `raise`   | `#fefdfb` | chips, active controls          |
+| `sunken`  | `#e8e5de` | footer, segmented-control wells |
 
-Cream studio ramp (overnight review): warm paper so part edges read at
-a glance. Steps run light to lighter. The film stage keeps its dark
-canvas; overlay text inside the stage keeps the deep ink ramp via the
-`.film-stage-scope` override, since dark text on the dark canvas would
-vanish. Fixed aurora wash stays at negligible alpha.
+The film stage colours live in `src/film/lighting.ts` (same family, per act;
+display stays the brightest act).
 
 ## Contrast (measured, WCAG relative luminance)
 
-| Foreground                | Background    | Ratio   | Requirement        | Result                          |
-| ------------------------- | ------------- | ------- | ------------------ | ------------------------------- |
-| `ink` `#201a12`           | `night`       | 14.2:1  | 7:1 primary        | pass                            |
-| `dim` `#5c554a`           | `night`       | 6.08:1  | 4.5:1 secondary    | pass                            |
-| `faint` `#655d4f`         | `night`       | 5.36:1  | 3:1 technical only | pass, non-essential labels only |
-| `aether` `#1f5fd0`        | `night`       | 4.80:1  | 4.5:1 live data    | pass                            |
-| `aether-strong` `#0f4fc4` | `night`       | 5.90:1  | 4.5:1 focus/active | pass                            |
-| `ink`                     | `surface`     | 15.31:1 | 7:1                | pass                            |
-| `dim`                     | `surface`     | 6.53:1  | 4.5:1              | pass                            |
-| `ink-inverse` `#f6f2e9`   | `aether-deep` | ~10:1   | 4.5:1 toggles      | pass                            |
+| Foreground                                 | night | surface | sunken | darkest stage `#d9d5cb` | Use                     |
+| ------------------------------------------ | ----- | ------- | ------ | ----------------------- | ----------------------- |
+| `ink` `#1c1b19`                            | 15.1  | 16.1    | 13.7   | 11.7                    | primary text            |
+| `dim` `#5d5a54`                            | 6.0   | 6.4     | 5.5    | 4.7                     | secondary text          |
+| `faint` `#66625a`                          | 5.3   | 5.7     | 4.8    | 4.1                     | technical labels only   |
+| `aether` `#1f5fd0`                         | 5.1   | 5.4     | 4.6    | 4.0                     | links, data marks       |
+| `aether-strong` `#1a4fb8`                  | 6.5   | 6.9     | 5.9    | 5.0                     | buttons, focus, kickers |
+| `ink-inverse` `#f7f6f2` on `aether-strong` | 6.8   |         |        |                         | primary button label    |
 
-`faint` never carries essential information. Text on glass must clear 4.5:1
-against the worst-case backdrop, which means an opaque scrim behind text.
+`faint` never carries essential information. Text over the 3D stage sits on
+a porcelain veil on its own side of the frame (see `FilmOverlay.tsx`).
 
 ## Type
 
-- Sans: Geist Variable (UI). Mono: Geist Mono Variable (labels, units).
-  Display: Space Grotesk Variable (numerals, headlines).
-- Roles: `.spec-num` (display numerals, tabular lining, tight tracking),
-  `.spec-unit` (mono uppercase units), `.spec-tech` (mono technical labels),
-  `.kicker` (mono uppercase section label).
-- No component restates letter-spacing.
+- One family: Geist Variable for display and UI; Geist Mono Variable for
+  technical readouts (units, focal lengths, part numbers). Space Grotesk was
+  removed in the overhaul.
+- Display roles: `.display-xl` (page h1), `.display-lg` (section h2),
+  `.display-md`; `.lede` for supporting copy (52ch).
+- Data roles: `.spec-num` (tabular lining numerals), `.spec-unit`,
+  `.spec-tech`, `.kicker`. All live in `@layer components`, so a utility on
+  the same element (colour, size) always wins.
+
+## Shape
+
+Controls are full pills (`.btn`, chips, segmented controls). Panels are
+`--radius-panel` (24px); inner cards `--radius-inner` (16px). Nothing else.
 
 ## Motion
 
 - Easings: `--ease-out-expo`, `--ease-out-quint`, `--ease-in-out-soft`.
-- Durations: fast 180ms, base 320ms, slow 640ms, reveal 800ms.
-- 3D damping ~5.5/s, frame-rate independent.
-- `prefers-reduced-motion` is a layout, not a kill switch (see M9).
+- Motion (`motion/react`) is the only UI animation runtime. Springs for
+  direct manipulation (selection rings, nav pill, zoom), eased durations for
+  system-initiated reveals.
+- Film chapters enter in reading order (kicker, headline words, body,
+  figure) and exit in 160ms; see `src/film/overlay/motion.ts`.
+- `prefers-reduced-motion` is a layout, not a kill switch: the film becomes
+  the static story, springs become fades, the Hz demo becomes a still strip.
 
 ## Glass tokens
 
 `--glass-tint`, `--glass-blur` (18px), `--glass-saturate` (140%),
-`--glass-rim`, `--glass-scrim`. Variants read these, never their own numbers.
-Full tier system in `docs/glass.md` (M6).
+`--glass-rim`, `--glass-scrim`. Used by the nav chrome and the inspect
+tooltip. Full tier system in `docs/glass.md` (M6).

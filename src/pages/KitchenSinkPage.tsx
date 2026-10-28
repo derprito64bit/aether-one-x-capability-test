@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Glass, type GlassVariant } from '../components/Glass/Glass.tsx'
+import { PhoneConfigProvider } from '../components/PhoneViewer/PhoneConfig.tsx'
 import { PhoneFrame } from '../components/Phone/PhoneFrame.tsx'
 import { PhoneViewer } from '../components/PhoneViewer/PhoneViewer.tsx'
 import { AetherOSPhone } from '../components/PhoneOS/AetherOSPhone.tsx'
@@ -41,13 +43,20 @@ export function KitchenSinkPage() {
         <AetherOSPhone />
         <DisplayDemo />
         <SoCPanel />
-        <FocalStrip />
+        <PhoneConfigProvider>
+          <FocalStripDemo />
+        </PhoneConfigProvider>
         <Reveal delayMs={0}>
           <p className="text-(--color-dim)">Reveal primitive, zero delay.</p>
         </Reveal>
       </div>
     </div>
   )
+}
+
+function FocalStripDemo() {
+  const [zoom, setZoom] = useState('1x')
+  return <FocalStrip zoom={zoom} onZoom={setZoom} />
 }
 
 function GLASS_VARIANT_CARDS() {

@@ -6,8 +6,10 @@ import {
   createFrameBodyGeometry,
   createFrameRingGeometry,
   createPanelGapGeometry,
+  createRearRimGeometry,
+  REAR_RIM_OPENING,
 } from './phoneGeometry.ts'
-import { BACK_FACE, CORNER_R, DIM } from './phoneDimensions.ts'
+import { BACK_FACE, CHAMFER, CORNER_R, DIM } from './phoneDimensions.ts'
 
 function groupSizes(geometry: THREE.BufferGeometry): number[] {
   return geometry.groups.map((group) => group.count)
@@ -85,5 +87,53 @@ describe('assignRailGroups', () => {
       }
       geometry.dispose()
     }
+  })
+})
+
+/**
+ * Hand-built annuli must wind every triangle the way its normals face:
+ * the front ring's lid was wound backwards, so the 1.4mm lid around the
+ * glass was back-face culled and never rendered.
+ */
+describe('hand-built frame annuli', () => {
+  function windingDisagreements(geometry: THREE.BufferGeometry): number {
+    const pos = geometry.getAttribute('position') as THREE.BufferAttribute
+    const nor = geometry.getAttribute('normal') as THREE.BufferAttribute
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const c = new THREE.Vector3()
+    const n = new THREE.Vector3()
+    let bad = 0
+    for (let t = 0; t < pos.count / 3; t++) {
+      a.fromBufferAttribute(pos, t * 3)
+      b.fromBufferAttribute(pos, t * 3 + 1).sub(a)
+      c.fromBufferAttribute(pos, t * 3 + 2).sub(a)
+      n.fromBufferAttribute(nor, t * 3)
+      if (b.cross(c).dot(n) <= 0) bad++
+    }
+    return bad
+  }
+
+  it('winds the front ring and the rear rim to face their normals', () => {
+    for (const geometry of [
+      createFrameRingGeometry(),
+      createFrameRingGeometry(true),
+      createRearRimGeometry(BACK_FACE + 0.00005, -0.00311),
+      createRearRimGeometry(BACK_FACE + 0.00005, -0.00311, true),
+    ]) {
+      expect(windingDisagreements(geometry)).toBe(0)
+      geometry.dispose()
+    }
+  })
+
+  it('opens the rear rim around the ceramic panel and closes it to the body outline', () => {
+    const geometry = createRearRimGeometry(BACK_FACE + 0.00005, -0.00311)
+    geometry.computeBoundingBox()
+    const box = geometry.boundingBox as THREE.Box3
+    expect(box.max.x).toBeCloseTo(DIM.w / 2, 6)
+    expect(box.min.z).toBeCloseTo(BACK_FACE + 0.00005, 9)
+    expect(box.max.z).toBeCloseTo(-0.00311, 9)
+    expect(REAR_RIM_OPENING.halfW).toBeLessThan(DIM.w / 2 - CHAMFER.body)
+    geometry.dispose()
   })
 })

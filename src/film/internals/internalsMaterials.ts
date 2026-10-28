@@ -161,7 +161,7 @@ export function createInternalsMaterials(dressed = false): InternalsMaterialSet 
     ...transparent,
   })
   dieFloor.opacity = 0
-  return {
+  const set: InternalsMaterialSet = {
     board,
     trace,
     shield,
@@ -178,6 +178,9 @@ export function createInternalsMaterials(dressed = false): InternalsMaterialSet 
     dieMark,
     dieFloor,
   }
+  // Named by registry key so live scene probes can identify every part.
+  for (const k of INTERNALS_KEYS) set[k].name = `internals:${k}`
+  return set
 }
 
 /** Disposes every registry material. Safe to call once per owner. */

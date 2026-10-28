@@ -75,6 +75,7 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
     coilRing: 0,
     stackSeparate: 0,
     layerCursor: 0,
+    featureCursor: 0,
     teardownGap: 0.0085,
     reducedMotion: false,
   })

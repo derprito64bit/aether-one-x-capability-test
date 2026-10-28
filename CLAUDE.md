@@ -136,6 +136,31 @@ src/zoom/         zoom module math
 
 ---
 
+## Site layer (overhaul, 2026-10-28)
+
+The web layer around the film was rebuilt; read `docs/design-tokens.md` before
+touching UI.
+
+- **Theme:** one light porcelain theme (the owner's "cream + more light" brief,
+  lower chroma), one cobalt accent, Geist + Geist Mono only.
+- **Film copy owns a side column**, never the device. `ACTS[].align` in
+  `timeline.ts` is that side (`left`/`right`); the camera keeps the device
+  centred. A porcelain veil sits on the copy side only; mobile copy sits at
+  the bottom over an upward veil.
+- **Stage is a seamless sweep:** `Stage.tsx` paints crown -> act colour ->
+  floor tone with no horizon break; the floor is an unlit disc with a radial
+  alpha fade (render order: floor, pool, device).
+- **Shared UI:** `PageHero` (split hero, visual on the right), `StudioStage`,
+  `StatStrip`, `.btn` / `.panel` / `.display-*` in `index.css`.
+- **Routing on Vercel:** `vercel.json` rewrites every path to `index.html`.
+  Without it, a direct load of any sub-page is a Vercel 404. Unknown paths
+  render `NotFoundPage`.
+- **Test IDs are contracts** (e2e): finish/capacity/price, SoC tabs + hero,
+  `#hz-slider` + readout, focal stops, OS simulator, film chapter + teardown
+  cards, `Act N: id` rail labels, `glass-chrome`.
+
+---
+
 ## Landmines
 
 Full list in `docs/context.md`. The ones that cost the most time:

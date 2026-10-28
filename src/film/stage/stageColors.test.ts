@@ -7,8 +7,8 @@ describe('stageColors', () => {
   it('starts at the arrival base and ends at the final base', () => {
     const start = stageColors(0).base.getHexString()
     const end = stageColors(1).base.getHexString()
-    expect(start).toBe('d3ccb9')
-    expect(end).toBe('dbd4c1')
+    expect(start).toBe('dedad1')
+    expect(end).toBe('e1ddd4')
   })
 
   it('makes the display act the brightest stage in the film', () => {

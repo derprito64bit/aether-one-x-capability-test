@@ -32,26 +32,30 @@ describe('teardown layers', () => {
     expect(uncovered).toEqual([])
   })
 
-  it('separates symmetrically about the body centre', () => {
-    expect(layerOffset(0, 10, LAYER_GAP, 1)).toBeCloseTo(-4.5 * LAYER_GAP, 9)
-    expect(layerOffset(9, 10, LAYER_GAP, 1)).toBeCloseTo(4.5 * LAYER_GAP, 9)
+  it('separates symmetrically about the body centre, front layers toward +z', () => {
+    // Cover glass lifts toward the front (+z), rear panel drops back: the
+    // physical order. The sign was once inverted (glass swept through all).
+    expect(layerOffset(0, 10, LAYER_GAP, 1)).toBeCloseTo(4.5 * LAYER_GAP, 9)
+    expect(layerOffset(9, 10, LAYER_GAP, 1)).toBeCloseTo(-4.5 * LAYER_GAP, 9)
     expect(layerOffset(0, 10, LAYER_GAP, 1) + layerOffset(9, 10, LAYER_GAP, 1)).toBeCloseTo(0, 9)
     expect(layerOffset(4, 10, LAYER_GAP, 0)).toBeCloseTo(0, 12)
   })
 
-  it('peels top-down: glass leads, rear panel lands last', () => {
+  it('peels outside-in: both faces lead, the middle pair lands last', () => {
     // All parked at sep 0, all landed at sep 1.
     for (let i = 0; i < 10; i++) {
       expect(peelLocal(0, i)).toBe(0)
       expect(peelLocal(1, i)).toBe(1)
     }
-    // Mid-peel the front of the stack is further along than the back.
-    expect(peelLocal(0.3, 0)).toBeGreaterThan(peelLocal(0.3, 5))
-    expect(peelLocal(0.3, 5)).toBeGreaterThan(peelLocal(0.3, 9))
-    expect(peelLocal(0.3, 9)).toBe(0)
-    // Layer 9 lands exactly at full separation, not before.
-    expect(peelLocal(0.99, 9)).toBeLessThan(1)
-    expect(peelLocal(1, 9)).toBe(1)
+    // Mid-peel each face is further along than the layers inside it, and
+    // the two halves mirror each other.
+    expect(peelLocal(0.3, 0)).toBeGreaterThan(peelLocal(0.3, 4))
+    expect(peelLocal(0.3, 9)).toBeGreaterThan(peelLocal(0.3, 5))
+    expect(peelLocal(0.3, 0)).toBe(peelLocal(0.3, 9))
+    expect(peelLocal(0.3, 4)).toBe(peelLocal(0.3, 5))
+    // The middle pair lands exactly at full separation, not before.
+    expect(peelLocal(0.99, 4)).toBeLessThan(1)
+    expect(peelLocal(1, 4)).toBe(1)
     // Clamps, never NaN: scrubbing past the ends is safe.
     expect(peelLocal(-0.5, 3)).toBe(0)
     expect(peelLocal(1.5, 3)).toBe(1)

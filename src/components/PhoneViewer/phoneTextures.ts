@@ -169,29 +169,19 @@ export function createLogoTexture(): CanvasTexture {
 export function createScreenTexture(): CanvasTexture {
   const { canvas, ctx } = makeCanvas(256, 512)
   if (ctx !== null) {
+    // Same luminous cobalt wallpaper as the film's live screen (site
+    // overhaul): deep cobalt crown, azure middle, warm porcelain bloom.
     const gradient = ctx.createLinearGradient(0, 0, 0, 512)
-    gradient.addColorStop(0, '#0a1322')
-    gradient.addColorStop(0.45, '#0d1c33')
-    gradient.addColorStop(0.75, '#132741')
-    gradient.addColorStop(1, '#0a1220')
+    gradient.addColorStop(0, '#0f2c66')
+    gradient.addColorStop(0.5, '#2a64d6')
+    gradient.addColorStop(1, '#7fa6ee')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, 256, 512)
-    const glow = ctx.createRadialGradient(150, 150, 20, 150, 150, 220)
-    glow.addColorStop(0, 'rgba(127,180,255,0.5)')
-    glow.addColorStop(1, 'rgba(127,180,255,0)')
+    const glow = ctx.createRadialGradient(128, 522, 10, 128, 522, 318)
+    glow.addColorStop(0, 'rgba(255,243,226,0.85)')
+    glow.addColorStop(1, 'rgba(255,243,226,0)')
     ctx.fillStyle = glow
     ctx.fillRect(0, 0, 256, 512)
-    ctx.fillStyle = 'rgba(240,246,255,0.9)'
-    ctx.beginPath()
-    ctx.arc(178, 96, 26, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.fillStyle = 'rgba(200,218,245,0.35)'
-    ctx.beginPath()
-    ctx.arc(60, 420, 40, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.beginPath()
-    ctx.arc(200, 460, 28, 0, Math.PI * 2)
-    ctx.fill()
   }
   const texture = new CanvasTexture(canvas)
   texture.colorSpace = SRGBColorSpace
@@ -399,6 +389,9 @@ export interface MicroTextItem {
 /**
  * Flat 1024 map for the cover-glass micro-text, roughness domain.
  * CircleGeometry UVs are planar over the disc: pixel = (pos / (2r) + 0.5) S.
+ * The glass mesh turns PI about Y to face the rear, which mirrors glass x
+ * into phone x, so labels are placed at -x to land beside their optics
+ * (they sat beside the opposite lens before); glyphs still read forwards.
  */
 export function createMicroTextTexture(items: MicroTextItem[], glassR: number): CanvasTexture {
   const S = 1024
@@ -411,7 +404,7 @@ export function createMicroTextTexture(items: MicroTextItem[], glassR: number): 
     ctx.textBaseline = 'middle'
     ctx.font = `500 26px ui-monospace, monospace`
     for (const item of items) {
-      const x = (item.x / (2 * glassR) + 0.5) * S
+      const x = (-item.x / (2 * glassR) + 0.5) * S
       const y = (item.y / (2 * glassR) + 0.5) * S
       // flipY: canvas row 0 is +y.
       ctx.fillText(item.text, x, S - y)

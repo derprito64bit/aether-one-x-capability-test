@@ -1,9 +1,10 @@
 # Device performance (measured)
 
 Prompt A section 11 recording. Triangle counts are exact, asserted in
-`src/components/PhoneViewer/phoneBudget.test.ts` — every entry mirrors the
-constructor arguments in `PhoneModel.tsx` / `CameraAssembly.tsx`, and the
-test fails if the budget regresses.
+`src/components/PhoneViewer/phoneBudget.test.ts`, which mounts the real
+PhoneModel headless (`sceneHarness.ts`) and counts every mesh and
+instance (round 04: the old hand-written constructor mirror drifted), and
+fails if the budget regresses.
 
 ## Triangles (2026-09-20 run)
 
@@ -82,8 +83,8 @@ no SSR, no DoF (both rejected pending measurement).
 
 LOD0 total 39,864 (budget 120k): cameraModule 15,290 (knurl 192 instanced
 teeth, three tunnels, medallion, periscope, ToF), bezel 512. LOD1 32,290
-(knurl to maps, one baffle, no ToF internals). All in
-`phoneBudget.test.ts`, which mirrors constructors one to one.
+(knurl to maps, one baffle, no ToF internals). Round 04 geometry audit,
+measured on the mounted model: LOD0 ~40.9k, LOD1 ~33.4k.
 
 ## Frame time
 

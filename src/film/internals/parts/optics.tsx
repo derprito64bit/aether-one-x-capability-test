@@ -1,4 +1,4 @@
-import { lensSpecs } from '../../../components/PhoneViewer/CameraAssembly.tsx'
+import { lensSpecs } from '../../../components/PhoneViewer/cameraLayout.ts'
 import { PERISCOPE, TOF } from '../../../components/PhoneViewer/phoneDimensions.ts'
 import { CAMERA_INTERNAL } from '../layout.ts'
 import type { InternalsMaterialSet } from '../internalsMaterials.ts'
@@ -32,8 +32,10 @@ export function OpticsPart({
           <primitive object={materials.housing} attach="material" />
         </mesh>
       </group>
+      {/* Sensor stack: a puck on the module axis (cylinders run along y
+          by default; unturned it was a 26mm saucer standing on edge). */}
       <group ref={register('sensor-stack')}>
-        <mesh position={[cx, cy, cz + 0.0014]}>
+        <mesh position={[cx, cy, cz + 0.0014]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.0131, 0.0131, 0.0012, 48]} />
           <primitive object={materials.housing} attach="material" />
         </mesh>
@@ -48,7 +50,10 @@ export function OpticsPart({
             <cylinderGeometry args={[lens.r, lens.r * 1.1, 0.0024, 24]} />
             <primitive object={materials.housing} attach="material" />
           </mesh>
-          <mesh rotation={[Math.PI / 2, 0, 0]} position={[lens.x, lens.y, cz + 0.0004]}>
+          {/* Dark lens cup on the barrel's rear face, facing the module
+              glass (a circle lies in XY; the old PI/2 turn stood it on
+              edge as a horizontal fin through the barrel). */}
+          <mesh rotation={[0, Math.PI, 0]} position={[lens.x, lens.y, cz - 0.0012 - 0.00002]}>
             <circleGeometry args={[lens.r * 0.7, 24]} />
             <primitive object={materials.dark} attach="material" />
           </mesh>
@@ -56,7 +61,7 @@ export function OpticsPart({
       ))}
       {/* Periscope block below the triangle, matching the exterior window */}
       <group ref={register('lens-periscope')}>
-        <mesh rotation={[Math.PI / 2, 0, 0]} position={[cx + PERISCOPE.x, cy + PERISCOPE.y, cz]}>
+        <mesh position={[cx + PERISCOPE.x, cy + PERISCOPE.y, cz]}>
           <boxGeometry args={[PERISCOPE.w, PERISCOPE.h, 0.0026]} />
           <primitive object={materials.housing} attach="material" />
         </mesh>
@@ -64,14 +69,14 @@ export function OpticsPart({
       {/* ToF module behind its window, separating on its own delay */}
       <group ref={register('tof-module')}>
         <mesh
-          rotation={[Math.PI / 2, 0, 0]}
+          rotation={[0, 0, (TOF.angleDeg * Math.PI) / 180]}
           position={[
             cx + TOF.ringR * Math.cos((TOF.angleDeg * Math.PI) / 180),
             cy + TOF.ringR * Math.sin((TOF.angleDeg * Math.PI) / 180),
             cz,
           ]}
         >
-          <boxGeometry args={[0.0082, 0.0034, 0.0012]} />
+          <boxGeometry args={[TOF.window.w, TOF.window.h, 0.0012]} />
           <primitive object={materials.housing} attach="material" />
         </mesh>
       </group>

@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { roundedRectPoints } from '../../lib/rounded-rect.ts'
 import {
+  BACK_PANEL,
   BEZEL,
   BEZEL_SURFACE,
   CORNER_R,
@@ -74,16 +75,22 @@ export function roundedRectPath(
 }
 
 /**
- * Frame-to-back panel gap: a recessed dark hairline following the top (or
- * bottom) edge rail to rail, corners included. A straight box of phone
- * width pokes 5mm past each rounded corner (round 02 poke-out fix), so the
- * strip is built from the body outline itself: the top band of loop
- * points, ribboned inward. Flat, facing -Z (the back viewer).
+ * Frame-to-back panel gap: a dark hairline following the top (or bottom)
+ * edge rail to rail, corners included. A straight box of phone width pokes
+ * 5mm past each rounded corner (round 02 poke-out fix), so the strip is
+ * built from an outline loop: the top band of loop points, ribboned
+ * inward. Flat, facing -Z (the back viewer). Defaults to the ceramic
+ * panel's edge, where the panel actually meets the frame: on the full
+ * body outline the strip floated in the air beside the frame chamfer.
  */
-export function createPanelGapGeometry(top: boolean): THREE.BufferGeometry {
+export function createPanelGapGeometry(
+  top: boolean,
+  halfW: number = BACK_PANEL.halfW + 0.0001,
+  halfH: number = BACK_PANEL.halfH + 0.0001,
+): THREE.BufferGeometry {
   const sign = top ? 1 : -1
-  const loop = bodyOutlinePoints(DIM.w / 2, DIM.h / 2, CORNER_R, 64)
-  const band = loop.filter(([, y]) => sign * y > DIM.h / 2 - 0.004)
+  const loop = bodyOutlinePoints(halfW, halfH, CORNER_R, 64)
+  const band = loop.filter(([, y]) => sign * y > halfH - 0.004)
   const width = 0.00012
   const positions: number[] = []
   const normals: number[] = []
@@ -120,6 +127,45 @@ export function createPanelGapGeometry(top: boolean): THREE.BufferGeometry {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  return geometry
+}
+
+/**
+ * Lower rear panel for split finishes: the ceramic panel outline (inset)
+ * below `topY`, rounded corners included, extruded `depth` along +z and
+ * centered on z = 0. A straight box of panel width poked past the rounded
+ * bottom corners, outside the body silhouette.
+ */
+export function createLowerPanelGeometry(
+  halfW: number,
+  halfH: number,
+  cornerR: number,
+  topY: number,
+  depth: number,
+): THREE.BufferGeometry {
+  const loop = bodyOutlinePoints(halfW, halfH, cornerR, 64)
+  // The loop runs CCW from +X; rotate it to start at the first point
+  // below the cut so the kept arc is contiguous.
+  const start = loop.findIndex(([, y], i) => {
+    const prev = loop[(i - 1 + loop.length) % loop.length] as [number, number]
+    return y < topY && prev[1] >= topY
+  })
+  const shape = new THREE.Shape()
+  shape.moveTo(-halfW, topY)
+  for (let k = 0; k < loop.length; k++) {
+    const p = loop[(start + k) % loop.length] as [number, number]
+    if (p[1] >= topY) break
+    shape.lineTo(p[0], p[1])
+  }
+  shape.lineTo(halfW, topY)
+  shape.closePath()
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: false,
+    steps: 1,
+  })
+  geometry.translate(0, 0, -depth / 2)
+  fitPlanarUVs(geometry)
   return geometry
 }
 
@@ -220,9 +266,11 @@ export function createFrameRingGeometry(coarse = false): THREE.BufferGeometry {
     const W0: [number, number, number] = [o0[0], o0[1], zFront - chamfer]
     const W1: [number, number, number] = [o1[0], o1[1], zFront - chamfer]
     const lidUv = (p: [number, number]): [number, number] => [p[0], p[1]]
-    // Front annulus lid, facing the viewer.
-    tri(F0, G0, G1, front, front, front, lidUv(q0), lidUv(h0), lidUv(h1))
-    tri(F0, G1, F1, front, front, front, lidUv(q0), lidUv(h1), lidUv(q1))
+    // Front annulus lid, facing the viewer. Wound counter-clockwise as
+    // seen from the front: it was wound the other way, so the 1.4mm lid
+    // was back-face culled and the front read straight into the ring.
+    tri(F0, G1, G0, front, front, front, lidUv(q0), lidUv(h1), lidUv(h0))
+    tri(F0, F1, G1, front, front, front, lidUv(q0), lidUv(q1), lidUv(h1))
     // Outer chamfer band, 45 degrees, catching the rim highlight.
     const chamferN0 = normalize3(n0[0], n0[1], 1)
     const chamferN1 = normalize3(n1[0], n1[1], 1)
@@ -245,7 +293,131 @@ export function createFrameRingGeometry(coarse = false): THREE.BufferGeometry {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
-  geometry.translate(0, 0, 0)
+  geometry.userData.annulusOpening = RING_OPENING
+  return geometry
+}
+
+/** Front ring display opening (rounded rect), shared by glass and ink. */
+export const RING_OPENING = {
+  halfW: DIM.w / 2 - BEZEL * 0.95,
+  halfH: DIM.h / 2 - BEZEL * 0.95,
+  r: Math.max(0.0005, CORNER_R - BEZEL * 0.95),
+} as const
+
+/** Rear rim panel opening: the ceramic panel's widest outline plus 0.05mm. */
+export const REAR_RIM_OPENING = {
+  halfW: BACK_PANEL.halfW + BACK_PANEL.bevel + 0.00005,
+  halfH: BACK_PANEL.halfH + BACK_PANEL.bevel + 0.00005,
+  r: CORNER_R + BACK_PANEL.bevel + 0.00005,
+} as const
+
+/**
+ * Rear frame rim: the explicit-annulus counterpart of the front ring,
+ * carrying the frame's rear chamfer (0.9mm across, 0.6mm deep) and a
+ * lid facing the rear, with the ceramic panel seated in its opening. The
+ * frame body used to be one solid extrusion down to the rear face, so the
+ * ceramic panel sat buried inside it; now the body stops at the panel's
+ * inner face and this rim frames the panel.
+ */
+export function createRearRimGeometry(
+  zLid: number,
+  zBase: number,
+  coarse = false,
+): THREE.BufferGeometry {
+  const perQuadrant = coarse ? 32 : 64
+  const total = perQuadrant * 4
+  const outer = bodyOutlinePoints(DIM.w / 2, DIM.h / 2, CORNER_R, perQuadrant)
+  const inner = bodyOutlinePoints(
+    REAR_RIM_OPENING.halfW,
+    REAR_RIM_OPENING.halfH,
+    REAR_RIM_OPENING.r,
+    perQuadrant,
+  )
+  const chamferW = CHAMFER.body
+  const chamferH = 0.0006
+  const positions: number[] = []
+  const normals: number[] = []
+  const uvs: number[] = []
+  const push = (p: number[], n: number[], uv: [number, number]): void => {
+    positions.push(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0)
+    normals.push(n[0] ?? 0, n[1] ?? 0, n[2] ?? 0)
+    uvs.push(uv[0], uv[1])
+  }
+  const loopNormals = (loop: Array<[number, number]>): Array<[number, number]> =>
+    loop.map((_, i) => {
+      const prev = loop[(i - 1 + loop.length) % loop.length] as [number, number]
+      const next = loop[(i + 1) % loop.length] as [number, number]
+      const tx = next[0] - prev[0]
+      const ty = next[1] - prev[1]
+      const len = Math.hypot(tx, ty) || 1
+      return [-ty / len, tx / len]
+    })
+  // Outward normals for the outer loop, opening-facing for the hole wall.
+  const outerNormals = loopNormals(outer).map(([x, y]): [number, number] => [-x, -y])
+  const innerNormals = loopNormals(inner)
+  const rear = [0, 0, -1]
+  for (let i = 0; i < total; i++) {
+    const j = (i + 1) % total
+    const o0 = outer[i] as [number, number]
+    const o1 = outer[j] as [number, number]
+    const h0 = inner[i] as [number, number]
+    const h1 = inner[j] as [number, number]
+    const n0 = outerNormals[i] as [number, number]
+    const n1 = outerNormals[j] as [number, number]
+    const m0 = innerNormals[i] as [number, number]
+    const m1 = innerNormals[j] as [number, number]
+    const q0: [number, number] = [o0[0] - n0[0] * chamferW, o0[1] - n0[1] * chamferW]
+    const q1: [number, number] = [o1[0] - n1[0] * chamferW, o1[1] - n1[1] * chamferW]
+    const F0 = [q0[0], q0[1], zLid]
+    const F1 = [q1[0], q1[1], zLid]
+    const G0 = [h0[0], h0[1], zLid]
+    const G1 = [h1[0], h1[1], zLid]
+    const W0 = [o0[0], o0[1], zLid + chamferH]
+    const W1 = [o1[0], o1[1], zLid + chamferH]
+    const B0 = [o0[0], o0[1], zBase]
+    const B1 = [o1[0], o1[1], zBase]
+    const H0 = [h0[0], h0[1], zBase]
+    const H1 = [h1[0], h1[1], zBase]
+    // Rear lid, facing -z (counter-clockwise seen from behind).
+    push(F0, rear, q0)
+    push(G0, rear, h0)
+    push(G1, rear, h1)
+    push(F0, rear, q0)
+    push(G1, rear, h1)
+    push(F1, rear, q1)
+    // Rear chamfer band, outward and rearward.
+    const c0 = normalize3(n0[0] * chamferH, n0[1] * chamferH, -chamferW)
+    const c1 = normalize3(n1[0] * chamferH, n1[1] * chamferH, -chamferW)
+    push(F0, c0, q0)
+    push(W1, c1, o1)
+    push(W0, c0, o0)
+    push(F0, c0, q0)
+    push(F1, c1, q1)
+    push(W1, c1, o1)
+    // Outer wall up to the body.
+    const N0 = [n0[0], n0[1], 0]
+    const N1 = [n1[0], n1[1], 0]
+    push(W0, N0, o0)
+    push(B1, N1, o1)
+    push(B0, N0, o0)
+    push(W0, N0, o0)
+    push(W1, N1, o1)
+    push(B1, N1, o1)
+    // Opening wall, facing the ceramic panel.
+    const M0 = [m0[0], m0[1], 0]
+    const M1 = [m1[0], m1[1], 0]
+    push(G0, M0, h0)
+    push(H1, M1, h1)
+    push(G1, M1, h1)
+    push(G0, M0, h0)
+    push(H0, M0, h0)
+    push(H1, M1, h1)
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  geometry.userData.annulusOpening = REAR_RIM_OPENING
   return geometry
 }
 
@@ -256,13 +428,17 @@ function normalize3(x: number, y: number, z: number): [number, number, number] {
 }
 
 /**
- * Circular module base (Prompt A2). Lathe profile with a smooth G1 base
- * fillet into the rear panel: the pad-to-panel transition is one machined
- * surface, not a flat chamfer. Bottom left open (seated inside the body).
+ * Circular module base (Prompt A2): the concave G1 fillet that blends the
+ * collar wall into the rear panel. Lathe profile in (radius, rise) space,
+ * flaring from `radius + fillet` on the panel to `radius` at `fillet` rise,
+ * so the pad-to-panel transition is one machined surface, not a chamfer.
+ * The collar wall above it is its own mesh: the base used to run the full
+ * module height at the collar radius, coplanar with the collar wall, and
+ * the two z-fought (and its convex bullnose undercut the panel instead of
+ * filleting into it). Rotate -PI/2 about X so rise maps to rear (-z).
  */
 export function createModuleBaseGeometry(
   radius: number,
-  height: number,
   fillet: number,
   segments = 96,
 ): THREE.BufferGeometry {
@@ -271,11 +447,59 @@ export function createModuleBaseGeometry(
   for (let i = 0; i <= steps; i++) {
     const t = (i / steps) * (Math.PI / 2)
     points.push(
-      new THREE.Vector2(radius - fillet + fillet * Math.sin(t), fillet - fillet * Math.cos(t)),
+      new THREE.Vector2(radius + fillet - fillet * Math.sin(t), fillet - fillet * Math.cos(t)),
     )
   }
-  points.push(new THREE.Vector2(radius, height))
   return new THREE.LatheGeometry(points, segments)
+}
+
+/**
+ * Lathe through (radius, rise) profile points, rotated so rise runs rear
+ * (-z) from the ceramic face plane at z = 0. Point order sets the facing:
+ * rising profiles face away from the axis, falling profiles face the axis
+ * (bores and risers seen from inside a recess). Every face is visible from
+ * its open side with single-sided materials, unlike an open cylinder,
+ * whose inside is back-face culled.
+ */
+export function createRearLatheGeometry(
+  profile: ReadonlyArray<readonly [number, number]>,
+  segments = 96,
+): THREE.BufferGeometry {
+  const geometry = new THREE.LatheGeometry(
+    profile.map(([r, rise]) => new THREE.Vector2(r, rise)),
+    segments,
+  )
+  geometry.rotateX(-Math.PI / 2)
+  return geometry
+}
+
+/**
+ * Flat rounded-rect annulus (outer rect with a rounded-rect opening),
+ * extruded `depth` along +z and centered on z = 0. Used for mouth rims: a
+ * solid rounded rect would cap the opening it is meant to frame.
+ */
+export function createRoundedRectRingGeometry(
+  outerW: number,
+  outerH: number,
+  outerR: number,
+  innerW: number,
+  innerH: number,
+  innerR: number,
+  depth: number,
+): THREE.BufferGeometry {
+  const shape = new THREE.Shape()
+  roundedRectPath(shape, -outerW / 2, -outerH / 2, outerW, outerH, outerR)
+  const hole = new THREE.Path()
+  roundedRectPath(hole, -innerW / 2, -innerH / 2, innerW, innerH, innerR)
+  shape.holes.push(hole)
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: false,
+    curveSegments: 8,
+    steps: 1,
+  })
+  geometry.translate(0, 0, -depth / 2)
+  return geometry
 }
 
 /**
@@ -290,10 +514,11 @@ export function createBezelGeometry(
   outerHH: number,
   innerHW: number,
   innerHH: number,
+  cornerR: number = CORNER_R,
 ): THREE.BufferGeometry {
   const band = Math.max(0.0005, Math.min(outerHW - innerHW, outerHH - innerHH))
-  const shape = bodyOutlineShape(outerHW, outerHH, CORNER_R, 64)
-  const holePts = bodyOutlinePoints(innerHW, innerHH, CORNER_R - band, 64)
+  const shape = bodyOutlineShape(outerHW, outerHH, cornerR, 64)
+  const holePts = bodyOutlinePoints(innerHW, innerHH, Math.max(0.0005, cornerR - band), 64)
   const hole = new THREE.Path()
   const first = holePts[0]
   if (first !== undefined) {
@@ -314,14 +539,28 @@ export function createBezelGeometry(
  * Centered rounded-rect slab with soft bevels. Front glass, display, and
  * back panel share the body outline: the glass extends out to meet the
  * rail overhang with a slight uniform gap, corners included.
+ *
+ * Centered means centered: the extrusion spans [-bevel, body + bevel], so
+ * the translate is -body / 2. It used to subtract one more bevel, which
+ * shifted every slab a bevel rearward: the 1.3mm back-panel bevel pushed
+ * the ceramic 1.3mm proud of the frame, burying the module's glass,
+ * medallion, flash, and ToF, plus the wordmark and regulatory print, and
+ * dropped the cover glass 0.35mm below its front details.
+ *
+ * UVs are planar 0..1 over the slab footprint (see fitPlanarUVs): the
+ * display wallpaper, glass smudge and gradient, and ceramic mottle are
+ * whole-panel maps. Extrude UVs are raw meters, so every one of them
+ * sampled a few texels at the corner and the screen read as one flat
+ * colour (near-black with the old wallpaper, washed-out with the new).
  */
 export function roundedRectSlabGeometry(
   halfW: number,
   halfH: number,
   depth: number,
   bevel: number,
+  cornerR: number = CORNER_R,
 ): THREE.BufferGeometry {
-  const shape = bodyOutlineShape(halfW, halfH, CORNER_R, 64)
+  const shape = bodyOutlineShape(halfW, halfH, cornerR, 64)
   const body = Math.max(0.0001, depth - bevel * 2)
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: body,
@@ -332,32 +571,45 @@ export function roundedRectSlabGeometry(
     curveSegments: 12,
     steps: 1,
   })
-  geometry.translate(0, 0, -(body / 2 + bevel))
+  geometry.translate(0, 0, -body / 2)
+  fitPlanarUVs(geometry)
   return geometry
 }
 
-/** Chamfered solid frame body: rounded-rect spine with beveled rims. */
+/**
+ * Rewrites UVs as a planar XY projection normalized to the geometry's
+ * footprint: u 0..1 left to right, v 0..1 bottom to top (canvas row 0 at
+ * the top edge with the default flipY).
+ */
+export function fitPlanarUVs(geometry: THREE.BufferGeometry): void {
+  geometry.computeBoundingBox()
+  const box = geometry.boundingBox
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute | undefined
+  if (box === null || uv === undefined) return
+  const w = Math.max(1e-9, box.max.x - box.min.x)
+  const h = Math.max(1e-9, box.max.y - box.min.y)
+  for (let i = 0; i < pos.count; i++) {
+    uv.setXY(i, (pos.getX(i) - box.min.x) / w, (pos.getY(i) - box.min.y) / h)
+  }
+  uv.needsUpdate = true
+}
+
+/**
+ * Frame body: straight rounded-rect spine from `backFaceZ` (the ceramic
+ * panel's inner face) to the ring base, so it tiles flush with the front
+ * ring and the rear rim (createRearRimGeometry), which carry the chamfers.
+ * Depth derives from the planes, not a const.
+ */
 export function createFrameBodyGeometry(backFaceZ: number, coarse = false): THREE.BufferGeometry {
-  // Tile exactly: rear face at backFaceZ, top face flush with the ring base
-  // so no groove reads edge-on. Depth derives from the planes, not a const.
-  const bevelSize = CHAMFER.body
-  const bevelThickness = 0.0006
-  const shape = bodyOutlineShape(
-    DIM.w / 2 - bevelSize,
-    DIM.h / 2 - bevelSize,
-    Math.max(0.0005, CORNER_R - bevelSize),
-    coarse ? 32 : 64,
-  )
+  const shape = bodyOutlineShape(DIM.w / 2, DIM.h / 2, CORNER_R, coarse ? 32 : 64)
   const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: Math.max(0.0001, RING_BASE_Z - backFaceZ - bevelThickness * 2),
-    bevelEnabled: true,
-    bevelSize,
-    bevelThickness,
-    bevelSegments: 4,
+    depth: Math.max(0.0001, RING_BASE_Z - backFaceZ),
+    bevelEnabled: false,
     curveSegments: coarse ? 10 : 20,
     steps: 1,
   })
-  geometry.translate(0, 0, backFaceZ + bevelThickness)
+  geometry.translate(0, 0, backFaceZ)
   return geometry
 }
 
@@ -385,7 +637,10 @@ export function createRoundedRectGeometry(
   return geometry
 }
 
-/** Centered rounded-rectangle slab with soft bevels. Replaces a rounded box. */
+/**
+ * Centered rounded-rectangle slab with soft bevels. Replaces a rounded box.
+ * Spans exactly [-depth / 2, depth / 2] in z (see roundedRectSlabGeometry).
+ */
 export function createSlabGeometry(
   w: number,
   h: number,
@@ -405,7 +660,7 @@ export function createSlabGeometry(
     curveSegments: 12,
     steps: 1,
   })
-  geometry.translate(0, 0, -(body / 2 + bevel))
+  geometry.translate(0, 0, -body / 2)
   return geometry
 }
 

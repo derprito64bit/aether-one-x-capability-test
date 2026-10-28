@@ -131,8 +131,8 @@ export const CAMERA_LENSES: CameraLens[] = [
     label: 'Ultra-wide · 14mm',
     zoom: '0.5x',
     mp: 48,
-    detail: '14 mm equiv, 122 deg field of view, macro capable',
-    spec: '48 MP · 122 deg',
+    detail: '14 mm equiv, 122° field of view, macro capable',
+    spec: '48 MP · 122°',
     sensor: '1/2.4 in',
     aperture: 'f/2.2',
     stabilization: 'EIS',
@@ -243,7 +243,7 @@ export const PERFORMANCE: Record<SoCKey, SoCUnit> = {
 
 export const DISPLAY = {
   size: '6.7 in',
-  resolution: '3200 x 1440',
+  resolution: '3200 × 1440',
   refreshMin: 1,
   refreshMax: 144,
   peakNits: 2800,
@@ -340,7 +340,7 @@ export const SPEC_CATEGORIES: SpecCategory[] = [
     label: 'Display',
     rows: [
       { label: 'Panel', value: '6.7 in Aether LTPO OLED' },
-      { label: 'Resolution', value: '3200 x 1440' },
+      { label: 'Resolution', value: '3200 × 1440' },
       { label: 'Refresh rate', value: '1 - 144 Hz adaptive' },
       { label: 'Peak brightness', value: '2800 nits' },
       { label: 'Color', value: '10-bit, HDR' },
@@ -355,7 +355,7 @@ export const SPEC_CATEGORIES: SpecCategory[] = [
       { label: 'CPU', value: '8-core' },
       { label: 'GPU', value: '14-core' },
       { label: 'NPU', value: `Dedicated, ${PERFORMANCE.npu.hero.value} TOPS` },
-      { label: 'Die area', value: `${CHIPSET.dieAreaMm2} mm2` },
+      { label: 'Die area', value: `${CHIPSET.dieAreaMm2} mm²` },
     ],
   },
   {
@@ -373,7 +373,7 @@ export const SPEC_CATEGORIES: SpecCategory[] = [
     label: 'Cameras',
     rows: [
       { label: 'Main', value: '50 MP · 23 mm, 1/1.3 in, f/1.6, OIS, dual-pixel AF' },
-      { label: 'Ultra-wide', value: '48 MP · 14 mm, 122 deg, macro' },
+      { label: 'Ultra-wide', value: '48 MP · 14 mm, 122°, macro' },
       { label: 'Mid', value: '50 MP · 50 mm portrait, f/1.9, OIS' },
       { label: 'Periscope', value: '50 MP · 135 mm folded optic, f/3.0, OIS' },
       { label: 'Front', value: '32 MP · autofocus, 4K60' },

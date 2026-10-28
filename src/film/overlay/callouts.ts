@@ -46,9 +46,41 @@ export const featureAnchorBridge: {
   x: number
   y: number
   z: number
+  /** World half-extent of the featured part (largest box half-size). */
+  radius: number
+  /** World position of the stack centre, so the label can face away from it. */
+  sx: number
+  sy: number
+  sz: number
   partId: string | null
   valid: boolean
-} = { x: 0, y: 0, z: 0, partId: null, valid: false }
+  /** The director's damped teardown cursor, and when it last wrote it (ms). */
+  cursor: number
+  cursorStamp: number
+} = {
+  x: 0,
+  y: 0,
+  z: 0,
+  radius: 0,
+  sx: 0,
+  sy: 0,
+  sz: 0,
+  partId: null,
+  valid: false,
+  cursor: 0,
+  cursorStamp: Number.NEGATIVE_INFINITY,
+}
+
+/**
+ * The teardown cursor the overlay labels by: the director's damped cursor
+ * (the one the layers move on) while the film canvas is running, else the
+ * raw progress cursor (static fallback, canvas not yet mounted). Copy,
+ * pointer, and motion then agree; on the raw cursor the camera chip faded
+ * in before the module moved and the copy changed while it still moved.
+ */
+export function overlayCursor(rawCursor: number, nowMs: number): number {
+  return nowMs - featureAnchorBridge.cursorStamp < 250 ? featureAnchorBridge.cursor : rawCursor
+}
 
 const scratch = new THREE.Vector3()
 

@@ -101,11 +101,7 @@ export function Film() {
 
   if (showFallback) {
     return (
-      <section
-        aria-label="Aether One X story"
-        className="mx-auto max-w-6xl px-4 py-16"
-        data-testid="film-fallback"
-      >
+      <section aria-label="Aether One X story" className="page py-16" data-testid="film-fallback">
         <h1 className="sr-only">Aether One X: power, without the noise.</h1>
         {CHAPTERS.map((chapter) =>
           chapter.act === 'teardown' ? (
@@ -115,8 +111,8 @@ export function Film() {
               <article aria-label="Act teardown" className="grid gap-6 py-12 md:grid-cols-2">
                 <div>
                   <p className="kicker">{chapter.kicker}</p>
-                  <h2 className="spec-num mt-3 text-4xl">{chapter.headline}</h2>
-                  <p className="mt-3 text-(--color-dim)">{chapter.body}</p>
+                  <h2 className="display-lg mt-3">{chapter.headline}</h2>
+                  <p className="lede mt-4">{chapter.body}</p>
                 </div>
               </article>
               {TEARDOWN_COPY.map((layer, i) => (
@@ -127,8 +123,8 @@ export function Film() {
                 >
                   <div>
                     <p className="kicker">{layer.kicker}</p>
-                    <h2 className="spec-num mt-3 text-4xl">{layer.headline}</h2>
-                    <p className="mt-3 text-(--color-dim)">{layer.body}</p>
+                    <h2 className="display-lg mt-3">{layer.headline}</h2>
+                    <p className="lede mt-4">{layer.body}</p>
                     <p className="spec-tech mt-3">{layer.figure}</p>
                   </div>
                   <div className="flex justify-center">
@@ -148,8 +144,8 @@ export function Film() {
             >
               <div>
                 <p className="kicker">{chapter.kicker}</p>
-                <h2 className="spec-num mt-3 text-4xl">{chapter.headline}</h2>
-                <p className="mt-3 text-(--color-dim)">{chapter.body}</p>
+                <h2 className="display-lg mt-3">{chapter.headline}</h2>
+                <p className="lede mt-4">{chapter.body}</p>
               </div>
               <div className="flex justify-center">
                 <PhoneFrame

@@ -2,27 +2,29 @@ import { useFrame } from '@react-three/fiber'
 import type { MotionValue } from 'motion/react'
 import { useRef, type MutableRefObject } from 'react'
 import * as THREE from 'three'
-import { centerBias, fitFov, macroFloorFov } from './framing.ts'
+import { centerBias } from './framing.ts'
 import { SHOTS, capAngularStep } from './shots.ts'
 import { STAGE_LIGHTING } from './lighting.ts'
 import { clearInspectPointer, setInspectPointer, tickInspect } from './inspect.ts'
 import type { ScreenMode } from './LiveScreen.tsx'
-import { computeFilmStates, layerWindow } from './states.ts'
+import { computeFilmStates } from './states.ts'
 import { actAt } from './timeline.ts'
+import { LAYER_GAP, LAYER_GAP_COMPACT, TEARDOWN_LAYERS } from './teardown/layers.ts'
 import {
-  LAYER_GAP,
-  LAYER_GAP_COMPACT,
-  TEARDOWN_LAYERS,
-  layerOffset,
-  peelLocal,
-  weightDamp,
-} from './teardown/layers.ts'
-import { applyLayerTransform } from './teardown/transform.ts'
-import { sampleFilm } from './sample.ts'
-import { dollyZoomFov } from '../zoom/zoom.ts'
-import { projectedExtentM } from '../lib/projected-extent.ts'
-import { DIM } from '../components/PhoneViewer/phoneDimensions.ts'
-import type { PhoneMaterialSet } from '../components/PhoneViewer/phoneMaterials.ts'
+  dampAimOffset,
+  dampTeardownScalars,
+  driveShellLayers,
+  teardownAimGoal,
+  type AimOffset,
+  type ShellGroups,
+  type TeardownScalars,
+} from './teardown/transform.ts'
+import { featureAnchorBridge } from './overlay/callouts.ts'
+import { filmTargetFov, sampleFilm, type FovScratch } from './sample.ts'
+import {
+  GLASS_SCREEN_ON_OPACITY,
+  type PhoneMaterialSet,
+} from '../components/PhoneViewer/phoneMaterials.ts'
 import type { InternalsControl } from './internals/Internals.tsx'
 
 const REDUCED_QUERY = '(prefers-reduced-motion: reduce)'
@@ -93,6 +95,57 @@ const FRAME_MATS = [
 ] as const
 
 const XRAY_ACTS = new Set(['teardown'])
+
+/** Materials whose env response tracks the act lighting (hoisted: no per-frame array). */
+const ENV_MATS = [
+  'framePX',
+  'frameNX',
+  'framePY',
+  'frameNY',
+  'frameChamfer',
+  'back',
+  'island',
+  'collarOuter',
+] as const satisfies ReadonlyArray<keyof PhoneMaterialSet>
+
+/**
+ * Optical separation steps, flattened with their ref keys precomputed so
+ * the frame loop builds no tuples or template strings.
+ */
+const OPTICS_STEPS: ReadonlyArray<{ key: string; delay: number; distance: number }> = (
+  ['main', 'ultra', 'mid', 'periscope'] as const
+).flatMap((lens) =>
+  (
+    [
+      ['cover', 0, 0.0012],
+      ['collar', 0.15, 0.001],
+      ['barrel', 0.3, 0.0007],
+      ['element', 0.45, 0.0004],
+      ['sensor', 0.6, 0.0002],
+    ] as const
+  ).map(([layer, delay, distance]) => ({ key: `${lens}:${layer}`, delay, distance })),
+)
+
+/** Damped, velocity-capped rotation step (snaps under reduced motion). */
+function capRotation(
+  current: number,
+  goal: number,
+  damp: number,
+  maxVelocity: number,
+  delta: number,
+  reduced: boolean,
+): number {
+  if (reduced) return goal
+  return capAngularStep(current, current + (goal - current) * damp, maxVelocity, delta)
+}
+
+/** Parks a shell group at rest. */
+function parkGroup(grp: THREE.Group | null): void {
+  if (grp === null) return
+  grp.position.set(0, 0, 0)
+  grp.rotation.set(0, 0, 0)
+  grp.scale.setScalar(1)
+}
 
 /** Rest opacity for translucent optics. Everything else rests at 1. */
 const BASE_OPACITY: Partial<Record<keyof PhoneMaterialSet, number>> = {
@@ -172,9 +225,18 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     accentTarget: new THREE.Color('#ffffff'),
     accentColor: new THREE.Color('#ffffff'),
     extents: { horizontalM: 0, verticalM: 0 },
-    extCam: [0, 0, 1] as [number, number, number],
-    extTgt: [0, 0, 0] as [number, number, number],
+    fov: {
+      cam: [0, 0, 1],
+      tgt: [0, 0, 0],
+      extents: { horizontalM: 0, verticalM: 0 },
+    } as FovScratch,
     prepared: false,
+    slide: new THREE.Vector3(),
+    reducedQuery: null as MediaQueryList | null,
+    td: { sep: 0, cursor: 0, ready: false } as TeardownScalars,
+    aim: { x: 0, y: 0, z: 0, ready: false },
+    aimGoal: { x: 0, y: 0, z: 0 } as AimOffset,
+    shell: { frame: null, back: null, glass: null, display: null, module: null } as ShellGroups,
   })
 
   useFrame((state, delta) => {
@@ -185,22 +247,29 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
         materials[name].transparent = true
       }
     }
-    const reduced = window.matchMedia(REDUCED_QUERY).matches
+    // One MediaQueryList for the life of the director, not one per frame.
+    s.reducedQuery ??= window.matchMedia(REDUCED_QUERY)
+    const reduced = s.reducedQuery.matches
     const p = progress.get()
     const t = sampleFilm(p)
     const st = computeFilmStates(p)
     const act = actAt(p).id
-    // Featured teardown layer, derived once per frame (round 03 Part C):
-    // the lighting block and the teardown driver share it, so neither
-    // recomputes or re-decides it later.
-    const featured =
-      st.layerCursor > 0.02 && st.layerCursor < 9.99 ? Math.min(9, Math.floor(st.layerCursor)) : -1
+    // Teardown motion rides one pair of damped scalars shared by every
+    // layer (shell here, internals via the control plane), so no two
+    // neighbours ever lag by different amounts.
+    dampTeardownScalars(s.td, st.stackSeparate, st.layerCursor, delta, reduced)
+    const tdSep = s.td.sep
+    const tdCursor = s.td.cursor
+    // Featured teardown layer, derived once per frame (round 03 Part C)
+    // from the damped cursor the layers move on: the lighting, the aim, the
+    // pointer anchor, and the overlay copy all follow this one cursor.
+    const featured = tdCursor > 0.02 && tdCursor < 9.99 ? Math.min(9, Math.floor(tdCursor)) : -1
+    featureAnchorBridge.cursor = tdCursor
+    featureAnchorBridge.cursorStamp = performance.now()
 
     const shot = SHOTS[act] ?? SHOTS.arrival
     const damp = reduced ? 1 : 1 - Math.exp(-delta * shot.dampPerSecond)
     const lookDamp = reduced ? 1 : 1 - Math.exp(-delta * shot.targetDampPerSecond)
-    const capRot = (current: number, goal: number): number =>
-      reduced ? goal : capAngularStep(current, goal, shot.maxAngularVelocity, delta)
 
     const cam = state.camera as THREE.PerspectiveCamera
     // Position glides: a hard flick through a fast move (battery exit runs
@@ -223,25 +292,34 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     s.look.z += (t.target.z - s.look.z) * lookDamp
     // Pointer parallax: small clamped offset applied at lookAt time, never
     // stored, so it cannot accumulate inside the damped aim.
-    let lookX = s.look.x
-    let lookY = s.look.y
-    if (!reduced) {
-      lookX += THREE.MathUtils.clamp(refs.parallaxX.get(), -0.5, 0.5) * 0.016
-      lookY += THREE.MathUtils.clamp(refs.parallaxY.get(), -0.5, 0.5) * 0.012
-    }
-    // Sandwich tour: the aim drifts toward the spotlight layer's slot so
-    // the copy subject stays near frame center while the stack itself
-    // never moves for the camera. Phone-local +z maps to screen-up in the
-    // flat lay, so the slot offset applies directly to lookY at half gain.
-    // Same slot expression as the driver, so aim converges on the true
-    // layer position; pure function of progress, damps like the aim.
-    if (act === 'teardown' && featured >= 0 && st.stackSeparate > 0.001) {
-      const tourGap = state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP
-      lookY += 0.5 * layerOffset(featured, 10, tourGap, peelLocal(st.stackSeparate, featured))
-    }
-    cam.lookAt(lookX, lookY, s.look.z)
-
+    const parallaxX = reduced ? 0 : THREE.MathUtils.clamp(refs.parallaxX.get(), -0.5, 0.5) * 0.016
+    const parallaxY = reduced ? 0 : THREE.MathUtils.clamp(refs.parallaxY.get(), -0.5, 0.5) * 0.012
+    // Teardown aim: tour drift toward the featured slot, the camera-layer
+    // slide follow, and the portrait drop, summed into one goal that one
+    // persistent offset damps toward (teardownAimGoal). Applied at lookAt
+    // like the parallax, so nothing accumulates inside the damped aim.
     const aspect = state.size.width / Math.max(1, state.size.height)
+    const hero = refs.hero.current
+    if (hero !== null) {
+      teardownAimGoal(
+        s.aimGoal,
+        act === 'teardown',
+        featured,
+        tdSep,
+        tdCursor,
+        state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP,
+        aspect,
+        hero.quaternion,
+        hero.scale.x,
+        s.slide,
+      )
+      dampAimOffset(s.aim, s.aimGoal, lookDamp)
+    }
+    const lookX = s.look.x + s.aim.x + parallaxX
+    const lookY = s.look.y + s.aim.y + parallaxY
+    const lookZ = s.look.z + s.aim.z
+    cam.lookAt(lookX, lookY, lookZ)
+
     const bx = centerBias(aspect, 'x')
     const by = centerBias(aspect, 'y')
     const px = t.fit !== null ? t.px * bx : t.px
@@ -256,9 +334,10 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
       } else {
         // Damped toward the sampled pose, then capped: a hard flick gets a
         // fast controlled move, never a whip (Prompt B section 7.2).
-        g.rotation.x = capRot(g.rotation.x, g.rotation.x + (t.rx - g.rotation.x) * damp)
-        g.rotation.y = capRot(g.rotation.y, g.rotation.y + (t.ry - g.rotation.y) * damp)
-        g.rotation.z = capRot(g.rotation.z, g.rotation.z + (t.rz - g.rotation.z) * damp)
+        const cap = shot.maxAngularVelocity
+        g.rotation.x = capRotation(g.rotation.x, t.rx, damp, cap, delta, reduced)
+        g.rotation.y = capRotation(g.rotation.y, t.ry, damp, cap, delta, reduced)
+        g.rotation.z = capRotation(g.rotation.z, t.rz, damp, cap, delta, reduced)
         const ns = t.scale
         g.scale.x += (ns - g.scale.x) * damp
         g.scale.y += (ns - g.scale.y) * damp
@@ -279,61 +358,23 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     }
 
     const distance = cam.position.distanceTo(s.look)
-    let targetFov = t.fov
-    if (t.fit !== null) {
-      // Size the fit to the separated stack, not one plate (round 03
-      // A.6.2): the box depth grows with stackSeparate, so framing opens
-      // as the layers lift and closes as they restack. Zero allocation:
-      // extents and tuples live in the frame scratch.
-      const stackGap = state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP
-      s.extCam[0] = cam.position.x
-      s.extCam[1] = cam.position.y
-      s.extCam[2] = cam.position.z
-      s.extTgt[0] = s.look.x
-      s.extTgt[1] = s.look.y
-      s.extTgt[2] = s.look.z
-      projectedExtentM(
-        {
-          w: DIM.w,
-          h: DIM.h,
-          t: DIM.t + 9 * stackGap * st.stackSeparate,
-        },
-        t.scale,
-        t.rx,
-        t.ry,
-        t.rz,
-        s.extCam,
-        s.extTgt,
-        s.extents,
-      )
-      const fitValue = fitFov({
-        fit: t.fit,
-        distanceM: distance,
-        aspect,
-        scale: t.scale,
-        rxRad: t.rx,
-        ryRad: t.ry,
-        pxM: t.px,
-        maxFovDeg: t.fovMax,
-        extents: s.extents,
-      })
-      const w = Math.min(1, Math.max(0, t.fit))
-      targetFov = Math.min(t.fovMax, t.fov + (fitValue - t.fov) * w)
-    }
-    if (aspect < 0.8) {
-      const floor = macroFloorFov(p, distance, aspect)
-      if (floor > targetFov) targetFov = floor
-    }
-    // Vertigo once, on the silicon feature: widen the lens while the camera
-    // pushes in so the die holds size and the background warps. Used once;
-    // twice would be a gimmick. Derived from the layer cursor, not raw
-    // progress, so the beat tracks layer 5 (round 01 A3).
-    if (!reduced) {
-      const w = layerWindow(st.layerCursor, 5, 0.5, 0.5)
-      if (w > 0) {
-        targetFov += (dollyZoomFov(targetFov, w * 0.12, distance) - targetFov) * w
-      }
-    }
+    s.fov.cam[0] = cam.position.x
+    s.fov.cam[1] = cam.position.y
+    s.fov.cam[2] = cam.position.z
+    s.fov.tgt[0] = s.look.x
+    s.fov.tgt[1] = s.look.y
+    s.fov.tgt[2] = s.look.z
+    const stackGap = state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP
+    const targetFov = filmTargetFov(
+      t,
+      p,
+      aspect,
+      stackGap,
+      tdSep,
+      distance,
+      reduced ? null : st.layerCursor,
+      s.fov,
+    )
     if (reduced) {
       if (Math.abs(cam.fov - targetFov) > 0.001) {
         cam.fov = targetFov
@@ -373,7 +414,7 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     // The teardown driver owns shell groups while stacked; the legacy
     // split resumes as separation returns to zero. Both converge near
     // zero at the handoff, so no snap either way.
-    if (st.stackSeparate <= 0.001) {
+    if (tdSep <= 0.001) {
       if (refs.glass.current !== null) refs.glass.current.position.z = split * 0.0045
       if (refs.back.current !== null) refs.back.current.position.z = -split * 0.0036
     }
@@ -381,7 +422,10 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     // Glass tracks power state: a dark mirror when off, dimmed to reveal
     // the live screen when on, dissolved with the shell in x-ray. A flat
     // 0.42 washed every off-screen act gray.
-    materials.screen.opacity = Math.max(0.05, 1 - st.screenOn * 0.58 - st.shellGhost * 0.36)
+    materials.screen.opacity = Math.max(
+      0.05,
+      1 - st.screenOn * (1 - GLASS_SCREEN_ON_OPACITY) - st.shellGhost * 0.36,
+    )
 
     // Live screen mode per act.
     const mode: ScreenMode =
@@ -432,39 +476,19 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
       refs.accentLight.current.intensity = s.accent
       refs.accentLight.current.color.copy(s.accentColor)
     }
-    for (const name of [
-      'framePX',
-      'frameNX',
-      'framePY',
-      'frameNY',
-      'frameChamfer',
-      'back',
-      'island',
-      'collarOuter',
-    ] as const) {
-      materials[name].envMapIntensity = s.env
-    }
+    for (const name of ENV_MATS) materials[name].envMapIntensity = s.env
     state.gl.toneMappingExposure = t.exposure * light.exposure
 
     // Optical separation: cover, collar, barrel, element, sensor open in
     // sequence over the optics beat (Prompt B section 5.2). Outward is -z.
     // Tight breathing, not detachment: at macro scale 2.2mm of cover travel
     // reads as a part floating off into space, so the stack stays laced.
-    const layers = [
-      ['cover', 0, 0.0012],
-      ['collar', 0.15, 0.001],
-      ['barrel', 0.3, 0.0007],
-      ['element', 0.45, 0.0004],
-      ['sensor', 0.6, 0.0002],
-    ] as const
     const sep = st.explodeOptics
-    for (const lens of ['main', 'ultra', 'mid', 'periscope'] as const) {
-      for (const [layer, delay, distance] of layers) {
-        const g = refs.opticsSeparation.current[`${lens}:${layer}`]
-        if (g === null || g === undefined) continue
-        const t = Math.min(1, Math.max(0, (sep - delay) / (1 - delay)))
-        g.position.z = -distance * (t * t * (3 - 2 * t))
-      }
+    for (const step of OPTICS_STEPS) {
+      const g = refs.opticsSeparation.current[step.key]
+      if (g === null || g === undefined) continue
+      const t = Math.min(1, Math.max(0, (sep - step.delay) / (1 - step.delay)))
+      g.position.z = -step.distance * (t * t * (3 - 2 * t))
     }
 
     // Internals control plane.
@@ -480,48 +504,32 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     c.energy = st.energy
     c.shieldLift = st.shieldLift
     c.coilRing = st.coilRing
-    c.stackSeparate = st.stackSeparate
-    c.layerCursor = st.layerCursor
+    c.stackSeparate = tdSep
+    c.layerCursor = tdCursor
+    c.featureCursor = tdCursor
     c.teardownGap = state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP
     c.reducedMotion = reduced
 
     // Teardown layer driver (sandwich rewrite, Prompt D sections 4-5):
-    // shell groups ride their peel-staggered layer slots, damped by weight
-    // class. No detach, no flip, no scale bump — the camera tours the open
-    // stack instead (aim track below). The module nests inside back, so its
-    // goal is relative to keep its world offset on its own layer.
-    const teardownSep = st.stackSeparate
+    // shell groups sit exactly on their peel-staggered slots for the shared
+    // damped scalars; the camera layer slides out and turns only during its
+    // own beat.
+    // Shared with layerStack.test.tsx (driveShellLayers), so the test runs
+    // the shipped path.
+    const teardownSep = tdSep
     if (teardownSep > 0.001) {
-      for (const layer of TEARDOWN_LAYERS) {
-        const damp = reduced ? 1 : 1 - Math.exp(-delta * weightDamp(layer.weight))
-        for (const name of layer.shell) {
-          const grp =
-            name === 'frame'
-              ? refs.frame.current
-              : name === 'back'
-                ? refs.back.current
-                : name === 'glass'
-                  ? refs.glass.current
-                  : name === 'display'
-                    ? refs.display.current
-                    : refs.module.current
-          if (grp === null) continue
-          const base =
-            name === 'module'
-              ? layerOffset(8, 10, c.teardownGap, peelLocal(teardownSep, 8)) -
-                layerOffset(9, 10, c.teardownGap, peelLocal(teardownSep, 9))
-              : undefined
-          applyLayerTransform(grp, layer, teardownSep, c.teardownGap, damp, base)
-        }
-      }
+      const shell = s.shell
+      shell.frame = refs.frame.current
+      shell.back = refs.back.current
+      shell.glass = refs.glass.current
+      shell.display = refs.display.current
+      shell.module = refs.module.current
+      driveShellLayers(shell, teardownSep, c.teardownGap, tdCursor)
     } else {
       // No legacy writer owns frame, display, or module: park them exactly.
-      for (const grp of [refs.frame.current, refs.display.current, refs.module.current]) {
-        if (grp === null) continue
-        grp.position.set(0, 0, 0)
-        grp.rotation.set(0, 0, 0)
-        grp.scale.setScalar(1)
-      }
+      parkGroup(refs.frame.current)
+      parkGroup(refs.display.current)
+      parkGroup(refs.module.current)
     }
 
     // Hover inspection during the x-ray pass only.
@@ -530,7 +538,10 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     } else {
       clearInspectPointer()
     }
-  })
+    // Priority -1: runs before every priority-0 subscriber, so Internals
+    // reads this frame's control plane, not last frame's (negative
+    // priorities never take over rendering).
+  }, -1)
 
   return null
 }

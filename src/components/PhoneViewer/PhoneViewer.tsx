@@ -30,9 +30,13 @@ interface PhoneViewerProps {
   label: string
   /** Reserve vertical space so canvas mount never shifts layout. */
   className?: string
+  /** Canvas box size; must match the reserved space in `className`. */
+  canvasClassName?: string
   /** Join an ancestor PhoneConfigProvider instead of minting local state. */
   sharedConfig?: boolean
 }
+
+const DEFAULT_CANVAS = 'h-[420px] w-full md:h-[520px]'
 
 /**
  * Lazy 3D phone study. Constructs the WebGL canvas only near the viewport,
@@ -44,6 +48,7 @@ export function PhoneViewer({
   finish = 'obsidian',
   label,
   className,
+  canvasClassName = DEFAULT_CANVAS,
   sharedConfig = false,
 }: PhoneViewerProps) {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -108,12 +113,18 @@ export function PhoneViewer({
       ) : nearViewport ? (
         <Suspense
           fallback={
-            <div className="flex min-h-[420px] items-center justify-center" role="status">
-              <p className="kicker">Preparing 3D</p>
+            // Same static phone as the pre-mount preview: no text flash,
+            // no layout jump while the 3D chunk streams in.
+            <div
+              className={`flex items-center justify-center ${canvasClassName}`}
+              role="status"
+              aria-label="3D phone loading"
+            >
+              <PhoneFrame finish={finish} face={face} label={`${label} (loading)`} />
             </div>
           }
         >
-          <div className="h-[420px] w-full md:h-[520px]" data-testid="phone-canvas">
+          <div className={canvasClassName} data-testid="phone-canvas">
             <PhoneCanvasLazy
               pose={pose}
               label={label}

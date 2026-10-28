@@ -21,6 +21,9 @@ const SoftwarePage = lazy(() =>
 const SpecificationsPage = lazy(() =>
   import('./pages/SpecificationsPage.tsx').then((m) => ({ default: m.SpecificationsPage })),
 )
+const NotFoundPage = lazy(() =>
+  import('./pages/NotFoundPage.tsx').then((m) => ({ default: m.NotFoundPage })),
+)
 const DevZoomPage = lazy(() =>
   import('./pages/DevZoomPage.tsx').then((m) => ({ default: m.DevZoomPage })),
 )
@@ -41,7 +44,14 @@ export function App() {
       <ScrollManager />
       <Navbar />
       <main id="main">
-        <Suspense fallback={<p role="status">Loading…</p>}>
+        <Suspense
+          fallback={
+            // Reserve the route's space so the footer never jumps up and back.
+            <div role="status" className="min-h-[100svh]">
+              <span className="sr-only">Loading</span>
+            </div>
+          }
+        >
           <Routes>
             <Route
               path="/"
@@ -111,6 +121,14 @@ export function App() {
                 }
               />
             ) : null}
+            <Route
+              path="*"
+              element={
+                <RouteErrorBoundary routeName="NotFound">
+                  <NotFoundPage />
+                </RouteErrorBoundary>
+              }
+            />
           </Routes>
         </Suspense>
       </main>
