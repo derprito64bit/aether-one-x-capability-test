@@ -35,7 +35,8 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
+      # All three engines: `npm run e2e` is the full chromium/firefox/webkit matrix.
+      - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run e2e
       - uses: actions/upload-artifact@v4
         if: failure()

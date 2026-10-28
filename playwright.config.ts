@@ -21,9 +21,12 @@ export default defineConfig({
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
+  // Vite's own bin through node: cross-platform (CI is Ubuntu, where the old
+  // `cmd /c node_modules\.bin\vite` exited 127) and no PowerShell .ps1 shim.
   webServer: [
     {
-      command: 'cmd /c node_modules\\.bin\\vite preview --port 4173 --strictPort --host 127.0.0.1',
+      command:
+        'node node_modules/vite/bin/vite.js preview --port 4173 --strictPort --host 127.0.0.1',
       port: 4173,
       // Never reuse: a stale preview of the previous dist causes nondeterministic
       // failures. Always boot the current build. CI already behaves this way.
@@ -31,7 +34,7 @@ export default defineConfig({
     },
     {
       // Dev server exists only for DEV-gated routes (/dev/*) under test.
-      command: 'cmd /c node_modules\\.bin\\vite --port 5174 --strictPort --host 127.0.0.1',
+      command: 'node node_modules/vite/bin/vite.js --port 5174 --strictPort --host 127.0.0.1',
       port: 5174,
       reuseExistingServer: false,
     },
