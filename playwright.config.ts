@@ -9,7 +9,8 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
   workers: 2,
-  timeout: 60000,
+  // CI renders WebGL in software (SwiftShader), several times slower than a GPU.
+  timeout: process.env.CI ? 120000 : 60000,
   expect: { timeout: 5000 },
   reporter: 'list',
   use: {

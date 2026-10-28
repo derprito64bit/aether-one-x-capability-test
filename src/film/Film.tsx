@@ -68,6 +68,26 @@ export function Film() {
   const [contextLost, setContextLost] = useState(false)
   const showFallback = !canRender || contextLost || reducedMotion
 
+  // Render the film only while it can be seen: the runway intersects the
+  // viewport and the tab is visible. A boolean that flips at most twice per
+  // visit (never a scroll value), so it is fine as React state.
+  const [onScreen, setOnScreen] = useState(true)
+  const [tabVisible, setTabVisible] = useState(() => document.visibilityState !== 'hidden')
+  useEffect(() => {
+    const el = runway.current
+    if (el === null || showFallback) return
+    const io = new IntersectionObserver((entries) => {
+      for (const entry of entries) setOnScreen(entry.isIntersecting)
+    })
+    io.observe(el)
+    const onVisibility = (): void => setTabVisible(document.visibilityState !== 'hidden')
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      io.disconnect()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [showFallback])
+
   // Pointer parallax for fine pointers only. MotionValues, never state.
   useEffect(() => {
     const el = stage.current
@@ -194,6 +214,7 @@ export function Film() {
             parallaxX={parallaxX}
             parallaxY={parallaxY}
             onContextLost={() => setContextLost(true)}
+            active={onScreen && tabVisible}
           />
         </Suspense>
         <FilmOverlay progress={progress} runway={runway} />
