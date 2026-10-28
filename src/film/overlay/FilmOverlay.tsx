@@ -408,7 +408,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
         data-testid="film-chapter"
         data-act={act.id}
         aria-live="polite"
-        className={`absolute inset-x-0 bottom-0 px-5 md:inset-x-auto md:bottom-auto md:top-1/2 md:w-[min(27vw,28rem)] md:-translate-y-1/2 md:px-0 md:pb-0 md:data-[align=left]:left-[max(var(--page-gutter),4vw)] md:data-[align=right]:right-[calc(4vw+4.5rem)] ${
+        className={`absolute inset-x-0 bottom-0 px-5 md:inset-x-auto md:bottom-auto md:top-1/2 md:w-[min(24vw,28rem)] xl:w-[min(27vw,28rem)] md:-translate-y-1/2 md:px-0 md:pb-0 md:data-[align=left]:left-[max(var(--page-gutter),4vw)] md:data-[align=right]:right-[calc(4vw+4.5rem)] ${
           teardown ? 'pb-20 md:pb-0' : 'pb-[calc(2rem+var(--sab))]'
         }`}
       >

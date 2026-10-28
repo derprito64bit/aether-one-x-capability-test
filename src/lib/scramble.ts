@@ -70,10 +70,19 @@ export function runScramble(root: HTMLElement, durationMs = 720): void {
     const start = performance.now() + k * 70
     const step = (now: number): void => {
       const t = Math.max(0, (now - start) / span)
-      el.textContent = scrambleFrame(text, t, seed)
+      // Read each frame: if React changed the text mid-run, end on the new one.
+      el.textContent = scrambleFrame(el.dataset.scrambleText ?? text, t, seed)
       if (t < 1) running.set(el, requestAnimationFrame(step))
       else running.delete(el)
     }
     running.set(el, requestAnimationFrame(step))
   })
+}
+
+/** Stops a running reveal and shows the true text (unmount, text change). */
+export function stopScramble(el: HTMLElement): void {
+  const raf = running.get(el)
+  if (raf !== undefined) cancelAnimationFrame(raf)
+  running.delete(el)
+  el.textContent = el.dataset.scrambleText ?? el.textContent
 }

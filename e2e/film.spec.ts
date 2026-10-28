@@ -181,6 +181,14 @@ test('a scroll resting between sections is carried into the next one', async ({ 
       const top = el.getBoundingClientRect().top + window.scrollY
       return (window.scrollY - top) / (el.offsetHeight - window.innerHeight)
     })
+  // One wheel tick as the browser delivers it: the input event, then the
+  // scroll. (Synthetic mouse.wheel does not scroll in every engine's
+  // headless build, so the test drives the two halves itself.)
+  const wheelTick = (dy: number): Promise<void> =>
+    page.evaluate((d) => {
+      window.dispatchEvent(new WheelEvent('wheel', { deltaY: d }))
+      window.scrollBy({ top: d, behavior: 'instant' })
+    }, dy)
   // Scripted jump to just past the design/glass boundary (0.155): a move.
   await page.evaluate(() => {
     const el = document.querySelector('[data-testid="film-runway"]') as HTMLElement
@@ -191,8 +199,7 @@ test('a scroll resting between sections is carried into the next one', async ({ 
   await page.waitForTimeout(400)
   expect(await progress()).toBeLessThan(0.16)
   // A small real scroll down, then hands off: the film finishes the move.
-  await page.mouse.move(640, 360)
-  await page.mouse.wheel(0, 30)
+  await wheelTick(30)
   await expect.poll(progress, { timeout: 15000 }).toBeGreaterThan(0.166)
   expect(await progress()).toBeLessThan(0.175)
   await expect(page.getByTestId('film-chapter')).toHaveAttribute('data-act', 'approach')
@@ -204,7 +211,7 @@ test('a scroll resting between sections is carried into the next one', async ({ 
     window.scrollTo(0, top - window.innerHeight * 0.55)
   })
   await page.waitForTimeout(400)
-  await page.mouse.wheel(0, 30)
+  await wheelTick(30)
   await expect
     .poll(() => page.evaluate(() => document.getElementById('buy')!.getBoundingClientRect().top), {
       timeout: 15000,

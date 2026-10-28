@@ -42,6 +42,9 @@ export const ACT_SCENE: Readonly<Record<ActId, SceneId>> = {
   final: 'studio',
 }
 
+/** Index of each scene in SCENE_IDS (no searching inside the frame loop). */
+const SCENE_INDEX = Object.fromEntries(SCENE_IDS.map((id, i) => [id, i])) as Record<SceneId, number>
+
 /** Rooms whose base is near-black: copy turns light, the phone is rim-lit. */
 export const DARK_SCENES: ReadonlySet<SceneId> = new Set([
   'projector',
@@ -67,21 +70,28 @@ const smooth = (t: number): number => {
  */
 export function sceneWeights(p: number, out: Float32Array): Float32Array {
   out.fill(0)
-  let index = ACTS.findIndex((a) => p >= a.start && p < a.end)
+  let index = -1
+  for (let i = 0; i < ACTS.length; i++) {
+    const a = ACTS[i] as (typeof ACTS)[number]
+    if (p >= a.start && p < a.end) {
+      index = i
+      break
+    }
+  }
   if (index < 0) index = p >= 1 ? ACTS.length - 1 : 0
   const act = ACTS[index]
   if (act === undefined) return out
-  const here = SCENE_IDS.indexOf(ACT_SCENE[act.id])
+  const here = SCENE_INDEX[ACT_SCENE[act.id]]
   // Blend toward the neighbour across whichever boundary p is near.
   const prev = ACTS[index - 1]
   const next = ACTS[index + 1]
   let other = -1
   let mix = 0
   if (prev !== undefined && p < act.start + SCENE_FADE / 2) {
-    other = SCENE_IDS.indexOf(ACT_SCENE[prev.id])
+    other = SCENE_INDEX[ACT_SCENE[prev.id]]
     mix = 1 - smooth((p - (act.start - SCENE_FADE / 2)) / SCENE_FADE)
   } else if (next !== undefined && p > act.end - SCENE_FADE / 2) {
-    other = SCENE_IDS.indexOf(ACT_SCENE[next.id])
+    other = SCENE_INDEX[ACT_SCENE[next.id]]
     mix = smooth((p - (act.end - SCENE_FADE / 2)) / SCENE_FADE)
   }
   if (other < 0 || other === here) {

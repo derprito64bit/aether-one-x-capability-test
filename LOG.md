@@ -2,6 +2,28 @@
 
 Newest first. One entry per session or stage.
 
+## 2026-10-28 - Section rooms, code-set type, auto-advance (stopgap)
+
+- Owner on the showcase: "much much better". Next asks: auto-scroll into
+  the next section (readers stop short), a smoother and slower pop-out,
+  hacker/code-like type that scrambles before showing, a giant projected
+  "megapixels" figure on a dark camera backdrop, and a colour review per
+  section because the film "looks like it's floating in space" (display:
+  colour spectrum plus refresh rate and range in big type).
+- Rooms: studio sweep for the opening, teardown and finale; HTML rooms
+  behind a transparent canvas for the rest (titanium, glass, projector,
+  spectrum, data, charge, os, neural), each with one accent and a giant
+  Geist Mono figure placed in that act's measured free wall. The phone is
+  relit per room. Palette in docs/design-tokens.md.
+- Code-set type decodes in everywhere it appears; screen readers only get
+  the true text. Auto-advance completes a resting scroll into the next
+  composed section (film rest map, page sections, film to buy deck),
+  after real input only. Pop-out: 30% arrive/leave, smootherstep, arc.
+- Measured, not guessed: phone extents per act from the live scene; a
+  wheel-walk of the whole page found one 1.4-screen settle out of the
+  teardown's opening, so the opening became a rest zone (0 anomalies
+  after).
+
 ## 2026-10-28 - Teardown rebuilt as a one-part-at-a-time showcase (stopgap)
 
 - Owner on the live teardown: the copy was a generic block, not an

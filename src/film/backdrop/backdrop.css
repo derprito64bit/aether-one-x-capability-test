@@ -171,6 +171,10 @@
   color: rgb(255 255 255 / 0.4);
   -webkit-text-stroke: 1.5px rgb(36 76 128 / 0.2);
 }
+.bd-glass .bd-unit {
+  -webkit-text-stroke: 0;
+  color: rgb(36 66 104 / 0.55);
+}
 .bd-glass .bd-caption {
   color: rgb(36 66 104 / 0.6);
 }
@@ -242,7 +246,15 @@
 .bd-spectrum {
   background: #040507;
 }
+/* The band never runs under the copy column (display copy is on the left):
+   the wrapper masks it, the band slides inside. Keeps small copy at AA. */
+.bd-band-wrap {
+  inset: 0;
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, transparent 30%, #000 48%);
+  mask-image: linear-gradient(to right, transparent 0%, transparent 30%, #000 48%);
+}
 .bd-band {
+  position: absolute;
   left: -40%;
   right: -40%;
   top: 18%;
@@ -387,8 +399,10 @@
   inset: auto;
   width: 100vw;
   height: 100vh;
+  height: 100svh;
   left: 35vmax;
   top: calc(35vmax - 50vh);
+  top: calc(35vmax - 50svh);
   transform: translateX(calc(var(--t) * -100vw));
   background-image: radial-gradient(circle, rgb(150 182 255 / 0.95) 0 1.6px, transparent 2.2px);
 }

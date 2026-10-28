@@ -19,16 +19,26 @@ export function settleDuration(distancePx: number, viewportPx: number): number {
 /**
  * Smoothly scrolls the window to `toY` with instant steps (the page's CSS
  * smooth behaviour would fight per-frame jumps). Returns a cancel, which
- * the caller fires on any new input.
+ * the caller fires on any new input. It also gives way by itself the
+ * moment anything else moves the page (a link, the act rail, a scrollbar
+ * drag, a script): a settle must never drag the reader back.
  */
 export function animateScrollTo(toY: number, onDone?: () => void): () => void {
   const fromY = window.scrollY
   const duration = settleDuration(toY - fromY, window.innerHeight)
   const t0 = performance.now()
   let raf = 0
+  let expected = fromY
   const frame = (now: number): void => {
+    // Compared with what was asked, not read back: WebKit applies a
+    // scrollTo a beat later, and rounds to whole pixels.
+    if (Math.abs(window.scrollY - expected) > 3) {
+      onDone?.()
+      return
+    }
     const t = Math.min(1, (now - t0) / duration)
-    window.scrollTo({ top: fromY + (toY - fromY) * easeInOutCubic(t), behavior: 'instant' })
+    expected = fromY + (toY - fromY) * easeInOutCubic(t)
+    window.scrollTo({ top: expected, behavior: 'instant' })
     if (t < 1) raf = requestAnimationFrame(frame)
     else onDone?.()
   }

@@ -15,14 +15,20 @@ import './backdrop.css'
  * behind the phone or run under the copy. The battery's x-ray fills the
  * middle of the frame, so its figure sits under the copy instead.
  */
-const FIGURE_AT: Partial<Record<ActId, { x: number; y: number; w: number }>> = {
+/**
+ * `fadeOut` (act-local t): the figure gives way where the phone pans
+ * across its wall later in the act (glass: measured 0.55-0.7 of the zone).
+ */
+const FIGURE_AT: Partial<
+  Record<ActId, { x: number; y: number; w: number; fadeOut?: readonly [number, number] }>
+> = {
   settle: { x: 76, y: 47, w: 28 },
-  approach: { x: 21, y: 46, w: 30 },
+  approach: { x: 21, y: 46, w: 30, fadeOut: [0.5, 0.62] },
   camera: { x: 25, y: 45, w: 40 },
   display: { x: 77, y: 45, w: 27 },
   storage: { x: 54, y: 47, w: 16 },
   battery: { x: 17.5, y: 80, w: 25 },
-  software: { x: 75, y: 46, w: 32 },
+  software: { x: 73, y: 46, w: 28 },
   ai: { x: 17, y: 46, w: 24 },
 }
 
@@ -71,7 +77,7 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
   useEffect(() => {
     const weights = new Float32Array(SCENE_IDS.length)
     const shown = new Set<string>()
-    let height = window.innerHeight
+    let height = rootRef.current?.clientHeight ?? window.innerHeight
     const onResize = (): void => {
       height = rootRef.current?.clientHeight ?? window.innerHeight
       apply(progress.get())
@@ -84,13 +90,24 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
         const w = weights[i] ?? 0
         el.style.opacity = w.toFixed(3)
         el.style.visibility = w <= 0.001 ? 'hidden' : 'visible'
-        if (w <= 0.001) return
         const act = ACTS.find((a) => a.id === SCENE_ACT.get(id))
         if (act === undefined) return
+        if (w <= 0.001) {
+          // Re-arm the decode even when a fast scroll skips the fade.
+          for (const key of shown) if (key.startsWith(`${act.id}:`)) shown.delete(key)
+          return
+        }
         const t = Math.min(1, Math.max(0, (p - act.start) / (act.end - act.start)))
         el.style.setProperty('--t', t.toFixed(4))
         if (id === 'charge') {
           el.style.setProperty('--level-px', `${((0.18 + 0.72 * t) * height).toFixed(1)}px`)
+        }
+        // A figure the phone pans across late in its act gives way first.
+        const fade = FIGURE_AT[act.id]?.fadeOut
+        const boardEl = el.querySelector<HTMLElement>('.bd-board')
+        if (fade !== undefined && boardEl !== null) {
+          const x = Math.min(1, Math.max(0, (t - fade[0]) / (fade[1] - fade[0])))
+          boardEl.style.opacity = (1 - x * x * (3 - 2 * x)).toFixed(3)
         }
         // Rooms with several figures show them in turn across the act.
         const board = SCENE_BOARDS[act.id]
@@ -192,7 +209,9 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
       {scene(
         'spectrum',
         <>
-          <div className="bd-band" />
+          <div className="bd-band-wrap">
+            <div className="bd-band" />
+          </div>
           <div className="bd-pixels" />
           <div className="bd-vignette" />
         </>,

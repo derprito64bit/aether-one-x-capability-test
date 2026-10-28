@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { runScramble } from '../lib/scramble.ts'
+import { runScramble, stopScramble } from '../lib/scramble.ts'
 
 interface ScrambleTextProps {
   text: string
@@ -20,7 +20,10 @@ interface ScrambleTextProps {
 export function ScrambleText({ text, className, auto = true }: ScrambleTextProps) {
   const ref = useRef<HTMLSpanElement>(null)
   useEffect(() => {
-    if (auto && ref.current !== null) runScramble(ref.current)
+    const el = ref.current
+    if (el === null) return
+    if (auto) runScramble(el)
+    return () => stopScramble(el)
   }, [auto, text])
   return (
     <span className={className}>
