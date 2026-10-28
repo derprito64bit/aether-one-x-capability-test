@@ -101,12 +101,21 @@ export const showcaseBridge: {
 }
 
 /**
+ * The cursor window is tight on purpose, unlike BRIDGE_STALE_MS: when the
+ * canvas draws slower than ~4 fps its damped cursor converges over many
+ * seconds of wall time, and copy that waited on it would trail the scroll
+ * by whole layers. There the raw cursor is the better guide.
+ */
+const CURSOR_STALE_MS = 250
+
+/**
  * The teardown cursor the overlay labels by: the director's damped cursor
- * while the film canvas is running, else the raw progress cursor (static
- * fallback, canvas not yet mounted). Copy, callouts and motion then agree.
+ * while the film canvas is running smoothly, else the raw progress cursor
+ * (static fallback, canvas not yet mounted, or too slow to follow).
+ * Copy, callouts and motion then agree.
  */
 export function overlayCursor(rawCursor: number, nowMs: number): number {
-  return nowMs - cursorBridge.stamp < BRIDGE_STALE_MS ? cursorBridge.cursor : rawCursor
+  return nowMs - cursorBridge.stamp < CURSOR_STALE_MS ? cursorBridge.cursor : rawCursor
 }
 
 /** One label in a callout column: its top edge and height, in pixels. */
