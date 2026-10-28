@@ -2,6 +2,20 @@
 
 Newest first. One entry per session or stage.
 
+## 2026-10-28 - Loader shipped; owner critique recorded as acceptance criteria
+
+- Owner asked where the requested loading page was (it had been deferred into
+  this plan instead of built) and judged parts of the stopgap lazy: film text,
+  pacing with no room for overscroll and no automated/held segments, and an
+  exploded view without detailed components or a showcase per component.
+- Shipped the loader on the stopgap: the phone silhouette fills as real
+  milestones land (shell, type, engine chunks, renderer, first frames). A
+  cold-load trace showed scene building blocking the main thread for 2-4 s,
+  so the fill runs on the compositor and keeps moving through the stalls; no
+  visible percentage, since text cannot update during those stalls.
+- The rest of the critique became hard gates in PLAN.md ("Acceptance criteria
+  from owner feedback") for the rebuild.
+
 ## 2026-10-28 - Stopgap overhaul merged; rebuild planned
 
 - Merged PR #1 as a stopgap: redesign of the web layer (porcelain theme,

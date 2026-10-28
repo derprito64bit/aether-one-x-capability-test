@@ -4,9 +4,15 @@ import { PhoneFrame } from '../components/Phone/PhoneFrame.tsx'
 import { CHAPTERS, TEARDOWN_COPY } from './chapters.ts'
 import { FilmOverlay } from './overlay/FilmOverlay.tsx'
 import { progressFromUrl, scrollToProgress } from './scroll.ts'
+import { FilmLoader } from './FilmLoader.tsx'
+import { filmLoad } from './loadTracker.ts'
 
 const FilmCanvasLazy = lazy(() =>
-  import('./FilmCanvas.tsx').then((m) => ({ default: m.FilmCanvas })),
+  import('./FilmCanvas.tsx').then((m) => {
+    // three + R3F + the film code have landed: the bulk of the loader's bar.
+    filmLoad.mark('engine')
+    return { default: m.FilmCanvas }
+  }),
 )
 
 function webglAvailable(): boolean {
@@ -77,7 +83,12 @@ export function Film() {
     const el = runway.current
     if (el === null || showFallback) return
     const io = new IntersectionObserver((entries) => {
-      for (const entry of entries) setOnScreen(entry.isIntersecting)
+      for (const entry of entries) {
+        setOnScreen(entry.isIntersecting)
+        // Off screen at load (e.g. a /#buy link): the paused film draws no
+        // frames, so there is no scene to wait for; never hold the page.
+        if (!entry.isIntersecting) filmLoad.mark('scene')
+      }
     })
     io.observe(el)
     const onVisibility = (): void => setTabVisible(document.visibilityState !== 'hidden')
@@ -85,6 +96,22 @@ export function Film() {
     return () => {
       io.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [showFallback])
+
+  // Loader milestones owned by the page: the shell is up, the type is
+  // ready, and JS chunks landing during the engine download count as real
+  // bytes. The WebGL film only: the static story has nothing to wait for.
+  useEffect(() => {
+    if (showFallback) return
+    filmLoad.mark('shell')
+    filmLoad.observeChunks()
+    let live = true
+    void document.fonts.ready.then(() => {
+      if (live) filmLoad.mark('fonts')
+    })
+    return () => {
+      live = false
     }
   }, [showFallback])
 
@@ -198,6 +225,7 @@ export function Film() {
       data-testid="film-runway"
     >
       <h1 className="sr-only">Aether One X: power, without the noise.</h1>
+      <FilmLoader tracker={filmLoad} />
       <div
         ref={stage}
         className="dark-scope sticky top-0 h-screen w-full overflow-hidden supports-[height:100svh]:h-[100svh]"
@@ -215,6 +243,7 @@ export function Film() {
             parallaxY={parallaxY}
             onContextLost={() => setContextLost(true)}
             active={onScreen && tabVisible}
+            onStage={(stage) => filmLoad.mark(stage)}
           />
         </Suspense>
         <FilmOverlay progress={progress} runway={runway} />
