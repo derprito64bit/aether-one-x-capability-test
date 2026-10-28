@@ -4,12 +4,14 @@ import * as THREE from 'three'
 import { TEARDOWN_COPY } from '../chapters.ts'
 import { cursorAt } from '../teardown/layers.ts'
 import {
+  BRIDGE_STALE_MS,
   calloutBridge,
   calloutReveal,
   overlayCursor,
   resolveColumn,
   showcaseBridge,
   type ColumnLabel,
+  type ShowcaseAnchor,
 } from './callouts.ts'
 
 /** Every callout of every layer, flattened once; labels render statically. */
@@ -20,14 +22,16 @@ const BY_LAYER: number[][] = TEARDOWN_COPY.map((_, layer) =>
   ITEMS.flatMap((item, i) => (item.layer === layer ? [i] : [])),
 )
 
-/** Leader end height inside a label: the middle of its title line. */
-const TITLE_MID = 9
+/**
+ * Leader end height inside a label: the middle of its title line, below
+ * the 2px top padding of the label's backdrop.
+ */
+const TITLE_MID = 11
 /** Title middle inside an over-the-part chip (its 4px top padding). */
 const CHIP_MID = 13
 const OVERVIEW_MID = 7
 /** Clearance between the part's projected box and a label column. */
 const CLEAR = 28
-const STALE_MS = 250
 
 interface Placed extends ColumnLabel {
   i: number
@@ -76,6 +80,16 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
     }))
     const left: Placed[] = []
     const right: Placed[] = []
+    const columns = [left, right]
+    const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const partAnchor = (key: string): ShowcaseAnchor | null => {
+      const parts = showcaseBridge.parts
+      for (let k = 0; k < parts.length; k++) {
+        const a = parts[k] as ShowcaseAnchor
+        if (a.on && a.key === key) return a
+      }
+      return null
+    }
     const overviewPlaced: Placed[] = TEARDOWN_COPY.map((_, i) => ({
       i,
       y: 0,
@@ -198,7 +212,11 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
       if (frame === 45) measure()
       const camera = calloutBridge.camera
       const now = performance.now()
-      const live = now - showcaseBridge.stamp < STALE_MS && camera !== null && rect.w > 0
+      const live =
+        showcaseBridge.stamp > 0 &&
+        now - showcaseBridge.stamp < BRIDGE_STALE_MS &&
+        camera !== null &&
+        rect.w > 0
       const layer = live ? showcaseBridge.layer : -1
       if (layer !== lastLayer) {
         if (lastLayer >= 0) hideLayer(lastLayer)
@@ -208,7 +226,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
         hideOverview()
         return
       }
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const reduced = reducedQuery.matches
       const desktop = rect.w >= 768
       const top = 84
       const bottom = desktop ? rect.h - 112 : rect.h * 0.56
@@ -251,8 +269,8 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
           const slot = placed[i]
           if (item === undefined || slot === undefined) continue
           slot.reveal = 0
-          const anchor = showcaseBridge.parts.find((a) => a.on && a.key === item.key)
-          if (anchor === undefined || !project(camera, anchor.x, anchor.y, anchor.z)) continue
+          const anchor = partAnchor(item.key)
+          if (anchor === null || !project(camera, anchor.x, anchor.y, anchor.z)) continue
           slot.ax = ((v.x + 1) / 2) * rect.w
           slot.ay = ((1 - v.y) / 2) * rect.h
           if (slot.ax < 0 || slot.ax > rect.w || slot.ay < 0 || slot.ay > rect.h) continue
@@ -296,7 +314,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
         }
         resolveColumn(left, top, bottom, 12)
         resolveColumn(right, top, bottom, 12)
-        for (const column of [left, right]) {
+        for (const column of columns) {
           for (const slot of column) {
             const label = labelRefs.current[slot.i]
             const leader = leaderRefs.current[slot.i]
@@ -479,7 +497,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
             labelRefs.current[i] = el
           }}
           data-testid={`showcase-callout-${item.key}`}
-          className="group absolute top-0 left-0 w-max max-w-(--label-w) group-data-[labels=over]/callouts:max-w-[10rem] group-data-[labels=over]/callouts:rounded-lg group-data-[labels=over]/callouts:bg-(--color-raise)/92 group-data-[labels=over]/callouts:px-2 group-data-[labels=over]/callouts:py-1 group-data-[labels=over]/callouts:shadow-[0_0_0_1px_var(--color-border-hairline),0_6px_16px_-8px_rgba(40,30,10,0.35)]"
+          className="group absolute top-0 left-0 w-max max-w-(--label-w) rounded-md bg-[rgb(242_240_235/0.8)] px-1.5 py-0.5 group-data-[labels=over]/callouts:max-w-[10rem] group-data-[labels=over]/callouts:rounded-lg group-data-[labels=over]/callouts:bg-(--color-raise)/92 group-data-[labels=over]/callouts:px-2 group-data-[labels=over]/callouts:py-1 group-data-[labels=over]/callouts:shadow-[0_0_0_1px_var(--color-border-hairline),0_6px_16px_-8px_rgba(40,30,10,0.35)]"
           style={{
             opacity: 0,
             visibility: 'hidden',

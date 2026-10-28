@@ -88,6 +88,13 @@ Teardown has ten layers in physical stack order, front to back: `cover-glass`, `
 `midframe`, `battery`, `logic-board`, `silicon`, `thermal`, `power-coil`, `camera`,
 `rear-panel`. The battery sits in front of the logic board; that is correct, not a bug.
 
+Since round 05 the teardown is a one-part-at-a-time showcase: the stack opens to a
+wide sandwich, holds a labelled overview (p 0.283-0.295), then each layer slides out
+alone to a hero pose for its window of `cursorAt(p)` while the rest dim. 3D and HTML
+meet in `showcaseBridge` (`src/film/overlay/callouts.ts`): the director writes the
+presented layer, focus, anchors and bounds every frame; the overlay writes the free
+`slot` the part is fitted into. Read `docs/teardown.md` "Round 05 showcase" first.
+
 Pacing is controlled by `--film-height` in `src/index.css`, **not** by moving act
 boundaries. Every boundary is a fraction, so changing the runway rescales everything
 without touching the timeline.

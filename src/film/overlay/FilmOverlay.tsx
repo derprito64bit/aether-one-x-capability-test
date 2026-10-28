@@ -61,8 +61,12 @@ function macroCard(p: number): number {
   return Math.min(up, down)
 }
 
+let reducedQuery: MediaQueryList | null = null
+
+/** One cached query: the overlay loops read this every frame. */
 function reducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  reducedQuery ??= window.matchMedia('(prefers-reduced-motion: reduce)')
+  return reducedQuery.matches
 }
 
 /**
@@ -215,7 +219,14 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     let last = performance.now()
     let pos = start >= TOUR_END ? TOUR_START : start
     const stop = (): void => setPlaying(false)
-    const onInterrupt = (): void => stop()
+    // Input on the button itself is the button's own business: a key or tap
+    // there must reach its toggle, not stop the tour only for the click
+    // that follows to start it again.
+    const onInterrupt = (event: Event): void => {
+      if (event.target instanceof Element && event.target.closest('[data-testid="teardown-play"]'))
+        return
+      stop()
+    }
     window.addEventListener('wheel', onInterrupt, { passive: true })
     window.addEventListener('touchstart', onInterrupt, { passive: true })
     window.addEventListener('keydown', onInterrupt)
@@ -255,6 +266,9 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     let idle = 0
     let raf = 0
     let settling = false
+    // A finger resting on the glass is still holding the page: never settle
+    // under it, only once it lifts (and any momentum has run out).
+    let touching = false
     const cancel = (): void => {
       window.clearTimeout(idle)
       cancelAnimationFrame(raf)
@@ -264,9 +278,19 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       lastInput = performance.now()
       cancel()
     }
+    const onTouchStart = (): void => {
+      touching = true
+      onInput()
+    }
+    const onTouchEnd = (): void => {
+      touching = false
+      lastInput = performance.now()
+      window.clearTimeout(idle)
+      idle = window.setTimeout(settle, 180)
+    }
     const settle = (): void => {
       const el = runway.current
-      if (el === null || performance.now() - lastInput > 1500) return
+      if (el === null || touching || performance.now() - lastInput > 1500) return
       const from = progress.get()
       const to = holdTarget(from, dir)
       if (to === null) return
@@ -290,15 +314,19 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       idle = window.setTimeout(settle, 180)
     })
     window.addEventListener('wheel', onInput, { passive: true })
-    window.addEventListener('touchstart', onInput, { passive: true })
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
     window.addEventListener('touchmove', onInput, { passive: true })
+    window.addEventListener('touchend', onTouchEnd, { passive: true })
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true })
     window.addEventListener('keydown', onInput)
     return () => {
       cancel()
       unsubscribe()
       window.removeEventListener('wheel', onInput)
-      window.removeEventListener('touchstart', onInput)
+      window.removeEventListener('touchstart', onTouchStart)
       window.removeEventListener('touchmove', onInput)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('touchcancel', onTouchEnd)
       window.removeEventListener('keydown', onInput)
     }
   }, [teardownActive, playing, progress, runway])

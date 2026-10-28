@@ -10,6 +10,15 @@ import * as THREE from 'three'
 export const calloutBridge: { camera: THREE.Camera | null } = { camera: null }
 
 /**
+ * How old a bridge write may be before the overlay treats the 3D side as
+ * stopped. The canvas only stops when the film is offscreen or unmounted
+ * (the overlay is gone then too), so this is generous: software GL (CI)
+ * draws the teardown at 280-500 ms a frame, and a tight window there
+ * flickers labels off whenever the overlay ticks just before the canvas.
+ */
+export const BRIDGE_STALE_MS = 1500
+
+/**
  * The director's damped teardown cursor (the one the layers move on) and
  * when it last wrote it (ms). Mutated in place, never replaced.
  */
@@ -78,7 +87,7 @@ export const showcaseBridge: {
     maxZ: number
     on: boolean
   }
-  /** performance.now() of the last write; stale (>250 ms) means not running. */
+  /** performance.now() of the last write; 0 until the 3D side first writes. */
   stamp: number
 } = {
   layer: -1,
@@ -97,7 +106,7 @@ export const showcaseBridge: {
  * fallback, canvas not yet mounted). Copy, callouts and motion then agree.
  */
 export function overlayCursor(rawCursor: number, nowMs: number): number {
-  return nowMs - cursorBridge.stamp < 250 ? cursorBridge.cursor : rawCursor
+  return nowMs - cursorBridge.stamp < BRIDGE_STALE_MS ? cursorBridge.cursor : rawCursor
 }
 
 /** One label in a callout column: its top edge and height, in pixels. */
