@@ -211,8 +211,11 @@ Full list in `docs/context.md`. The ones that cost the most time:
    flattens, the lighting is doing no work and materials will not rescue it.
 5. Re-capture snapshots and review diffs by eye before committing them.
 
-GPU here is an RTX 3070 with a Ryzen 5600X, so real traces are meaningful. SwiftShader
-appears only in headless runs and gives lower bounds, not real numbers.
+GPU here is an AMD Radeon RX 6700 XT (WebGL renderer string, measured 2026-10-28; older
+notes said RTX 3070), so real traces are meaningful. Plain headless runs fall back to
+SwiftShader and give lower bounds only. Headless Playwright on the real GPU is
+`chromium.launch({ channel: 'chrome', args: ['--use-angle=d3d11'] })`: fast, true
+colour, and the right tool for capture scripts on this machine.
 
 ---
 

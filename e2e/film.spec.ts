@@ -133,6 +133,43 @@ test('teardown copy tracks fast jumps, all ten layers (round 03 Part B)', async 
   }
 })
 
+test('teardown showcase labels the open sandwich, then one part at a time', async ({ page }) => {
+  test.setTimeout(180000)
+  await page.goto('/')
+  await skipWithoutWebgl(page)
+  await expect(page.getByTestId('film-runway')).toBeVisible()
+  const jump = async (p: number): Promise<void> => {
+    await page.evaluate((target) => {
+      const sec = [...document.querySelectorAll('*')].find((e) =>
+        (e as HTMLElement).style?.height?.includes('--film-height'),
+      ) as HTMLElement
+      document.documentElement.style.scrollBehavior = 'auto'
+      document.scrollingElement!.scrollTop = Math.round(
+        sec.offsetTop + target * (sec.offsetHeight - window.innerHeight),
+      )
+    }, p)
+  }
+  const lit = (prefix: string): Promise<string[]> =>
+    page.evaluate(
+      (pre) =>
+        [...document.querySelectorAll(`[data-testid^="${pre}"]`)]
+          .filter((el) => Number.parseFloat((el as HTMLElement).style.opacity || '0') > 0.5)
+          .map((el) => (el as HTMLElement).dataset.testid!.replace(pre, '')),
+      prefix,
+    )
+  // Overview hold: every layer named, no part presented.
+  await jump(0.289)
+  await expect.poll(() => lit('showcase-layer-'), { timeout: 60000 }).toHaveLength(10)
+  expect(await lit('showcase-callout-')).toEqual([])
+  // Battery mid-hold: its own sub-components only, and its card.
+  await jump(0.295 + 0.02 * 3.6)
+  await expect
+    .poll(() => lit('showcase-callout-'), { timeout: 60000 })
+    .toEqual(['battery.cell', 'battery.bms', 'battery.connector', 'battery.tabs'])
+  expect(await lit('teardown-card-')).toEqual(['battery'])
+  expect(await lit('showcase-layer-')).toEqual([])
+})
+
 test('teardown play auto-scrolls the showcase (overnight watchability)', async ({ page }) => {
   // Software GL on CI is slow; set here (a details-object timeout is ignored).
   test.setTimeout(120000)

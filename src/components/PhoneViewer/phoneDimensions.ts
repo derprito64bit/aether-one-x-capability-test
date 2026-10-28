@@ -34,6 +34,29 @@ export const GLASS_FRONT_Z = FRONT_GLASS.z + FRONT_GLASS.depth / 2
 /** Cover glass underside. */
 export const GLASS_BACK_Z = FRONT_GLASS.z - FRONT_GLASS.depth / 2
 export const DISPLAY_PANEL = { depth: 0.0006, z: GLASS_BACK_Z - 0.00004 - 0.0003 } as const
+/**
+ * Display flex tail (chip-on-film): hinged on the panel's bottom edge,
+ * 0.1mm behind its back face. Folded behind the panel in the device; the
+ * teardown showcase unfolds it below the panel so the driver IC shows.
+ * Authored unfolded, relative to the hinge (tail runs -y).
+ */
+export const DISPLAY_FLEX = {
+  hingeY: -0.0774,
+  z: DISPLAY_PANEL.z - DISPLAY_PANEL.depth / 2 - 0.0001,
+  width: 0.016,
+  length: 0.019,
+  thickness: 0.0001,
+  /** Driver IC: centre this far down the tail, on its front face. */
+  icY: 0.0085,
+  icW: 0.011,
+  icH: 0.0018,
+  icDepth: 0.0003,
+  /** Board-to-board connector near the tail end. */
+  connY: 0.0162,
+  connW: 0.0085,
+  connH: 0.0026,
+  connDepth: 0.0005,
+} as const
 
 /** Front frame split: solid rear body plus a perimeter bezel ring. */
 export const FRAME_BODY_DEPTH = 0.0042 // body zone; slab depth derives from planes
@@ -43,6 +66,19 @@ export const FRAME_BODY_DEPTH = 0.0042 // body zone; slab depth derives from pla
 // device split in two phones.
 export const RING_BASE_Z = -0.0001
 export const RING_DEPTH = 0.004
+/**
+ * Midframe: the rails are an open ring (wall inward from the outline) and
+ * a thin mid-plate sits just under the ring lid. Components mount on the
+ * plate's rear face; the screws seat on it.
+ */
+export const MIDFRAME = {
+  wall: 0.0016,
+  plateZ: -0.00035,
+  plateDepth: 0.0005,
+  /** Screw seat (group z) and head rear face. */
+  screwSeatZ: -0.0008,
+  screwZ: -0.001,
+} as const
 
 /** Rear ceramic outboard face: the reference plane every rear feature seats against. */
 export const CERAMIC_FACE_Z = -0.00391

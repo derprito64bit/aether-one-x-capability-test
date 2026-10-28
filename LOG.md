@@ -2,6 +2,29 @@
 
 Newest first. One entry per session or stage.
 
+## 2026-10-28 - Teardown rebuilt as a one-part-at-a-time showcase (stopgap)
+
+- Owner on the live teardown: the copy was a generic block, not an
+  introduction of each part's capabilities; the open stack never focused
+  on one part and was overwhelming; it should open like a sandwich so
+  each part can be seen, which would expose low-detail parts.
+- 3D (model agent, round 05): the stack opens to 34 mm gaps and holds a
+  labelled overview, then each layer slides out alone to a hero pose
+  while the rest dim to 15%. Every part that was a box or slab got real
+  detail (midframe, battery, port, haptic, speaker, chamber, camera and
+  more); 36 sub-components exist as geometry with anchors.
+- Copy and overlay: each layer has a headline, a two-sentence intro, four
+  capabilities and 3-4 named sub-components, every figure traced to
+  src/data or the model (tested). Callouts stagger in with leaders drawn
+  from hotspots; label columns beside the part on wide frames, title chips
+  over it on narrow ones. The overlay publishes the free slot the part
+  must fit, so labels and part never collide.
+- Pacing: `--film-height` 3200svh desktop / 2300svh mobile (about 62vh per
+  layer on desktop); a resting scroll mid-move settles into the next hold
+  in the direction of travel; Play holds each layer about 4 s.
+- This also lands on the stopgap before the rebuild: PLAN.md's gates for a
+  detailed per-component teardown and held segments still apply to R1-R6.
+
 ## 2026-10-28 - Loader shipped; owner critique recorded as acceptance criteria
 
 - Owner asked where the requested loading page was (it had been deferred into

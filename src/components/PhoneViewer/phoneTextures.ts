@@ -256,6 +256,46 @@ export function createScreenGradientTexture(): CanvasTexture {
 }
 
 /**
+ * Cover-glass reflection sheen for the teardown showcase: a soft diagonal
+ * band of reflected softbox light plus a thin secondary streak, white with
+ * the coverage in alpha. Faded in only while the glass is presented.
+ */
+export function createGlassSheenTexture(): CanvasTexture {
+  const W = 256
+  const H = 512
+  const { canvas, ctx } = makeCanvas(W, H)
+  if (ctx !== null) {
+    ctx.clearRect(0, 0, W, H)
+    const band = ctx.createLinearGradient(0, 0, W, H * 0.55)
+    band.addColorStop(0, 'rgba(255,255,255,0)')
+    band.addColorStop(0.28, 'rgba(255,255,255,0.05)')
+    band.addColorStop(0.42, 'rgba(255,255,255,0.55)')
+    band.addColorStop(0.5, 'rgba(255,255,255,0.32)')
+    band.addColorStop(0.62, 'rgba(255,255,255,0.04)')
+    band.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = band
+    ctx.fillRect(0, 0, W, H)
+    const streak = ctx.createLinearGradient(0, H * 0.35, W, H)
+    streak.addColorStop(0, 'rgba(255,255,255,0)')
+    streak.addColorStop(0.55, 'rgba(255,255,255,0)')
+    streak.addColorStop(0.6, 'rgba(255,255,255,0.28)')
+    streak.addColorStop(0.64, 'rgba(255,255,255,0)')
+    streak.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = streak
+    ctx.fillRect(0, 0, W, H)
+    // Soft cool falloff toward the lower edge.
+    const floor = ctx.createLinearGradient(0, H * 0.7, 0, H)
+    floor.addColorStop(0, 'rgba(214,228,255,0)')
+    floor.addColorStop(1, 'rgba(214,228,255,0.16)')
+    ctx.fillStyle = floor
+    ctx.fillRect(0, 0, W, H)
+  }
+  const texture = new CanvasTexture(canvas)
+  texture.colorSpace = SRGBColorSpace
+  return texture
+}
+
+/**
  * Subpixel hint: high-frequency RGB stripes at very low amplitude for the
  * macro display overlay. Faded in only below ~12cm camera distance by the
  * model shell; never shipped at normal distance, where it would alias.

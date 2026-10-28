@@ -19,6 +19,7 @@ import {
   createMedallionTexture,
   createMicroTextTexture,
   createRegulatoryTexture,
+  createGlassSheenTexture,
   createScreenGradientTexture,
   createScreenTexture,
   createSmudgeMap,
@@ -85,6 +86,18 @@ export interface PhoneMaterialSet {
   antenna: MeshPhysicalMaterial
   /** SIM tray strip. */
   simTray: MeshPhysicalMaterial
+  /** Midframe plate: bead-blasted aluminium, inside the rails. */
+  midplate: MeshPhysicalMaterial
+  /** Display flex tail: amber polyimide. */
+  flex: MeshPhysicalMaterial
+  /** Driver IC and flex connector bodies: black epoxy, a little gloss. */
+  driverIc: MeshPhysicalMaterial
+  /** Cover-glass edge: the thickness seen edge-on, cool and dark, shown only while presented. */
+  glassRim: MeshPhysicalMaterial
+  /** Cover-glass 2.5D bevel glint: a bright line inside the edge, presented only. */
+  glassGlint: MeshPhysicalMaterial
+  /** Cover-glass reflection sheen, shown only while presented. */
+  glassSheen: MeshPhysicalMaterial
   /** Outer collar wall: knurled, machined. */
   collarOuter: MeshPhysicalMaterial
   /** Outer collar top face: polished, carries the etched partner arc text. */
@@ -157,6 +170,12 @@ export const MATERIAL_KEYS = [
   'speaker',
   'antenna',
   'simTray',
+  'midplate',
+  'flex',
+  'driverIc',
+  'glassRim',
+  'glassGlint',
+  'glassSheen',
   'collarOuter',
   'collarTop',
   'knurlWall',
@@ -435,6 +454,65 @@ export function createPhoneMaterials(params: FinishParams): PhoneMaterialSet {
     metalness: 0.5,
     roughness: 0.55,
   })
+  const midplate = makeMaterial({
+    color: new Color('#767d87'),
+    metalness: 0.85,
+    roughness: 0.52,
+    envMapIntensity: 0.9,
+  })
+  const flex = makeMaterial({
+    color: new Color('#b8701c'),
+    metalness: 0.1,
+    roughness: 0.42,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.3,
+  })
+  const driverIc = makeMaterial({
+    color: new Color('#101216'),
+    metalness: 0.2,
+    roughness: 0.32,
+  })
+  // Teardown showcase glass dressing: invisible (opacity 0) until the
+  // film presents the cover glass; never written depth.
+  // On the porcelain stage a white rim vanishes: glass reads through its
+  // edge (dark, cool, seen through the thickness) and a bright bevel line.
+  const glassRim = makeMaterial({
+    color: new Color('#33414f'),
+    metalness: 0.2,
+    roughness: 0.05,
+    clearcoat: 1,
+    clearcoatRoughness: 0.03,
+    envMapIntensity: 1.6,
+    opacity: 0,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4,
+  })
+  const glassGlint = makeMaterial({
+    color: new Color('#ffffff'),
+    metalness: 0,
+    roughness: 0.05,
+    emissive: new Color('#f4f8ff'),
+    emissiveIntensity: 0.9,
+    opacity: 0,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -8,
+  })
+  const sheen = createGlassSheenTexture()
+  const glassSheen = makeMaterial({
+    color: new Color('#ffffff'),
+    map: sheen,
+    emissive: new Color('#eef4ff'),
+    emissiveMap: sheen,
+    emissiveIntensity: 0.6,
+    metalness: 0,
+    roughness: 0.2,
+    opacity: 0,
+    depthWrite: false,
+  })
   const simTray = makeMaterial({
     color: new Color('#9aa3b0'),
     metalness: 1,
@@ -686,6 +764,12 @@ export function createPhoneMaterials(params: FinishParams): PhoneMaterialSet {
     speaker,
     antenna,
     simTray,
+    midplate,
+    flex,
+    driverIc,
+    glassRim,
+    glassGlint,
+    glassSheen,
     collarOuter,
     collarTop,
     knurlWall,

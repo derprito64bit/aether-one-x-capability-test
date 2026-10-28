@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { InternalsMaterialSet } from '../internalsMaterials.ts'
 import type { PartRegister } from './register.ts'
@@ -11,8 +11,20 @@ import {
   SHIELD_CANS,
   SUB_BOARD,
   SUB_PARTS,
+  THERMAL_PAD,
   VAPOR_CHAMBER,
 } from '../layout.ts'
+import { MARK_CELLS } from '../showcaseTextures.ts'
+import { createRoundedRectRingGeometry } from '../../../components/PhoneViewer/phoneGeometry.ts'
+import { disposeAll, markPlane, softSlab } from './shapes.ts'
+
+/** Chip marking cells for the components the showcase names. */
+const CHIP_MARKS: Record<string, number> = {
+  nand: MARK_CELLS.memory,
+  modem: MARK_CELLS.modem,
+  pmic: MARK_CELLS.pmic,
+  'charge-ic': MARK_CELLS.charge,
+}
 
 const MAIN_REAR_Z = MAIN_BOARD.cz - MAIN_BOARD.thickness / 2
 const SUB_REAR_Z = SUB_BOARD.cz - SUB_BOARD.thickness / 2
@@ -61,6 +73,39 @@ export function BoardPart({
     return mesh
   }, [materials])
 
+  const geo = useMemo(() => {
+    const out: Record<string, THREE.BufferGeometry> = {
+      mask: new THREE.PlaneGeometry(MAIN_BOARD.w - 0.0004, MAIN_BOARD.h - 0.0004),
+      chamber: softSlab(
+        VAPOR_CHAMBER.w / 2,
+        VAPOR_CHAMBER.h / 2,
+        VAPOR_CHAMBER.thickness,
+        0.00015,
+        0.004,
+        16,
+      ),
+      seam: createRoundedRectRingGeometry(
+        VAPOR_CHAMBER.w - 0.0024,
+        VAPOR_CHAMBER.h - 0.0024,
+        0.0028,
+        VAPOR_CHAMBER.w - 0.0036,
+        VAPOR_CHAMBER.h - 0.0036,
+        0.0022,
+        0.00001,
+      ),
+      pad: new THREE.PlaneGeometry(THERMAL_PAD.size, THERMAL_PAD.size),
+      graphite: softSlab(GRAPHITE.w / 2, GRAPHITE.h / 2, GRAPHITE.thickness, 0, 0.003, 16),
+      graphiteMark: markPlane(0.022, 0.011, MARK_CELLS.graphite),
+    }
+    for (const [id, cell] of Object.entries(CHIP_MARKS)) {
+      const part = [...BOARD_PARTS, ...SUB_PARTS].find((p) => p.id === id)
+      if (part !== undefined) out[`mark:${id}`] = markPlane(part.w * 0.86, part.h * 0.72, cell)
+    }
+    return out
+  }, [])
+  useEffect(() => () => disposeAll(geo), [geo])
+  useEffect(() => () => vents.geometry.dispose(), [vents])
+
   // Discrete components, each its own exploding part. btb-up/btb-low are
   // rendered as connectors in the flex group above, not here.
   const discretes = [...BOARD_PARTS.slice(1), ...SUB_PARTS].filter(
@@ -74,14 +119,15 @@ export function BoardPart({
           <boxGeometry args={[MAIN_BOARD.w, MAIN_BOARD.h, MAIN_BOARD.thickness]} />
           <primitive object={materials.board} attach="material" />
         </mesh>
-        {/* Gold trace strips, a 0.01mm film on the rear face (they stood
-            0.2mm off it, into the parts mounted over them) */}
-        {[-0.02, 0.012].map((x) => (
-          <mesh key={x} position={[x, MAIN_BOARD.cy, MAIN_REAR_Z - 0.000005]}>
-            <boxGeometry args={[0.004, MAIN_BOARD.h - 0.004, 0.00001]} />
-            <primitive object={materials.trace} attach="material" />
-          </mesh>
-        ))}
+        {/* Solder mask, routing, vias, pads, and silkscreen: printed on the
+            rear face the components mount on (round 05 showcase) */}
+        <mesh
+          geometry={geo.mask}
+          position={[MAIN_BOARD.cx, MAIN_BOARD.cy, MAIN_REAR_Z - 0.000005]}
+          rotation={[0, Math.PI, 0]}
+        >
+          <primitive object={materials.boardMask} attach="material" />
+        </mesh>
       </group>
       <group ref={register('sub-board')}>
         <mesh position={[SUB_BOARD.cx, SUB_BOARD.cy, SUB_BOARD.cz]}>
@@ -148,6 +194,7 @@ export function BoardPart({
       {/* Discrete components, each its own exploding part */}
       {discretes.map((part) => {
         const boardZ = part.y > 0 ? MAIN_REAR_Z : SUB_REAR_Z
+        const mark = geo[`mark:${part.id}`]
         return (
           <group key={part.id} ref={register(part.id)}>
             <mesh position={[part.x, part.y, boardZ - part.z / 2]}>
@@ -157,21 +204,62 @@ export function BoardPart({
                 attach="material"
               />
             </mesh>
+            {mark !== undefined ? (
+              <mesh
+                geometry={mark}
+                position={[part.x, part.y, boardZ - part.z - 0.00001]}
+                rotation={[0, Math.PI, 0]}
+              >
+                <primitive object={materials.chipMark} attach="material" />
+              </mesh>
+            ) : null}
           </group>
         )
       })}
-      {/* Vapour chamber: stamped copper, warm tone, distinct from graphite */}
+      {/* Vapour chamber: stamped copper with soft edges, a welded seam
+          inset from the rim, the sealed fill tube, and the paste footprint
+          where the SoC can presses on it */}
       <group ref={register('vapor-chamber')}>
-        <mesh position={[VAPOR_CHAMBER.cx, VAPOR_CHAMBER.cy, VAPOR_CHAMBER.cz]}>
-          <boxGeometry args={[VAPOR_CHAMBER.w, VAPOR_CHAMBER.h, VAPOR_CHAMBER.thickness]} />
+        <mesh
+          geometry={geo.chamber}
+          position={[VAPOR_CHAMBER.cx, VAPOR_CHAMBER.cy, VAPOR_CHAMBER.cz]}
+        >
           <primitive object={materials.vapor} attach="material" />
         </mesh>
+        <mesh
+          geometry={geo.seam}
+          position={[
+            VAPOR_CHAMBER.cx,
+            VAPOR_CHAMBER.cy,
+            VAPOR_CHAMBER.cz + VAPOR_CHAMBER.thickness / 2 + 0.000005,
+          ]}
+        >
+          <primitive object={materials.shield} attach="material" />
+        </mesh>
+        <mesh
+          position={[
+            VAPOR_CHAMBER.cx + VAPOR_CHAMBER.w / 2 - 0.004,
+            VAPOR_CHAMBER.cy - VAPOR_CHAMBER.h / 2 + 0.0004,
+            VAPOR_CHAMBER.cz,
+          ]}
+        >
+          <cylinderGeometry args={[0.0003, 0.0003, 0.0022, 10]} />
+          <primitive object={materials.vapor} attach="material" />
+        </mesh>
+        <mesh geometry={geo.pad} position={[THERMAL_PAD.x, THERMAL_PAD.y, THERMAL_PAD.z]}>
+          <primitive object={materials.paste} attach="material" />
+        </mesh>
       </group>
-      {/* Graphite spreader: near-black, almost no specular, barely tumbles */}
+      {/* Graphite spreader: near-black laminate, soft corners, printed spec */}
       <group ref={register('graphite-sheet')}>
-        <mesh position={[GRAPHITE.cx, GRAPHITE.cy, GRAPHITE.cz]}>
-          <boxGeometry args={[GRAPHITE.w, GRAPHITE.h, GRAPHITE.thickness]} />
+        <mesh geometry={geo.graphite} position={[GRAPHITE.cx, GRAPHITE.cy, GRAPHITE.cz]}>
           <primitive object={materials.dark} attach="material" />
+        </mesh>
+        <mesh
+          geometry={geo.graphiteMark}
+          position={[0.012, GRAPHITE.cy - 0.032, GRAPHITE.cz + GRAPHITE.thickness / 2 + 0.00001]}
+        >
+          <primitive object={materials.chipMark} attach="material" />
         </mesh>
       </group>
     </group>

@@ -1,8 +1,8 @@
 import { PauseIcon, PlayIcon } from '../../components/icons.tsx'
 import { motion, useMotionValueEvent, type MotionValue } from 'motion/react'
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { Glass } from '../../components/Glass/Glass.tsx'
-import { CHAPTERS, TEARDOWN_COPY } from '../chapters.ts'
+import { CHAPTERS, TEARDOWN_COPY, TEARDOWN_INTRO_STATS, type TeardownStat } from '../chapters.ts'
 import { inspectHit } from '../inspect.ts'
 import type { ActId } from '../key.ts'
 import { luminance, scrimForStage, stageColors } from '../stage/stageColors.ts'
@@ -17,6 +17,7 @@ import { Headline } from './Headline.tsx'
 import { Kicker } from './Kicker.tsx'
 import { CHAPTER, ITEM } from './motion.ts'
 import { SpecLines } from './SpecLines.tsx'
+import { TOUR_END, TOUR_START, holdTarget, playRate, rawCursor } from './tour.ts'
 import { XrayReadout } from './XrayReadout.tsx'
 
 interface FilmOverlayProps {
@@ -65,6 +66,59 @@ function reducedMotion(): boolean {
 }
 
 /**
+ * Scroll-linked stagger inside a teardown card: step `n` of the card
+ * fades and rises in as the card's --reveal (0..1, written by the card
+ * loop) passes it. Pure CSS off one variable, so it scrubs both ways.
+ */
+function stagger(n: number): CSSProperties {
+  const t = `clamp(0, calc((var(--reveal, 1) - ${(n * 0.1).toFixed(2)}) * 4), 1)`
+  return { opacity: t, transform: `translateY(calc((1 - ${t}) * 10px))` }
+}
+
+/** A part's headline capabilities: figure first, then what it buys you. */
+function StatGrid({
+  stats,
+  columns,
+  className = '',
+}: {
+  stats: TeardownStat[]
+  columns: 2 | 3
+  className?: string
+}) {
+  return (
+    <dl
+      className={`mt-5 grid gap-x-6 gap-y-3.5 border-t border-(--color-border-hairline) pt-4 md:mt-7 md:gap-y-5 md:pt-6 ${
+        columns === 3 ? 'grid-cols-3' : 'grid-cols-2'
+      } ${className}`}
+    >
+      {stats.map((stat, k) => (
+        <div key={stat.label} className="flex flex-col" style={stagger(2 + k * 0.6)}>
+          <dt className="mt-1 text-[11.5px] leading-snug text-(--color-dim) md:mt-1.5 md:text-[12.5px]">
+            {stat.label}
+          </dt>
+          <dd className="order-first flex items-baseline gap-1 text-[1.2rem] leading-none font-semibold tracking-[-0.03em] text-(--color-ink) tabular-nums md:text-[clamp(1.4rem,1.9vw,1.9rem)]">
+            {stat.value}
+            {stat.unit !== '' && (
+              <span className="text-[0.52em] font-medium tracking-normal text-(--color-dim)">
+                {stat.unit}
+              </span>
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+/** Progress of the runway's current scroll position (mapped like Film). */
+function runwayProgress(el: HTMLElement): number | null {
+  const rect = el.getBoundingClientRect()
+  const span = rect.height - window.innerHeight
+  if (span <= 0) return null
+  return (window.scrollY - (rect.top + window.scrollY)) / span
+}
+
+/**
  * Editorial captions, act rail, teardown controls and inspect tooltip.
  * Copy owns a side column (the camera keeps the device centred), with a
  * soft porcelain veil on that side only; under 768px it drops to the
@@ -77,41 +131,55 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
   const [readout, setReadout] = useState<string | null>(null)
   const chapter = CHAPTERS.find((c) => c.act === act.id) ?? CHAPTERS[0]
   const side = act.align === 'right' ? 'right' : 'left'
-  // Teardown layer cards: all ten render once in a grid stack and a rAF
-  // loop writes opacity/transform straight from the continuous cursor
-  // (round 03 Part B). AnimatePresence mode="wait" wedged on fast scrolls
-  // (280ms exits vs 0.02 progress per layer); scroll-positioned cards are
-  // exactly reversible because they are a pure function of progress.
-  const cardRefs = useRef<Array<HTMLDivElement | null>>([])
+  // Teardown showcase copy: the overview intro and one card per layer
+  // render once in a grid stack, and a rAF loop writes opacity and the
+  // stagger variable straight from the cursor (round 03 Part B):
+  // AnimatePresence wedged on fast scrolls, while scroll-positioned cards
+  // are exactly reversible because they are a pure function of progress.
+  const introRef = useRef<HTMLDivElement | null>(null)
+  const cardRefs = useRef<Array<HTMLElement | null>>([])
   const segRefs = useRef<Array<HTMLSpanElement | null>>([])
   useEffect(() => {
     let raf = 0
+    const last = TEARDOWN_COPY.length - 1
+    const show = (el: HTMLElement, o: number, reveal: number): void => {
+      el.style.opacity = o.toFixed(3)
+      el.style.visibility = o <= 0.01 ? 'hidden' : 'visible'
+      el.style.setProperty('--reveal', reveal.toFixed(3))
+    }
     const tick = () => {
       raf = requestAnimationFrame(tick)
       const p = progress.get()
+      const reduced = reducedMotion()
       // Cards follow the cursor the layers move on (damped by the director
-      // while the canvas runs), so copy never changes ahead of the stack.
-      const c = Math.min(overlayCursor(cursorAt(p), performance.now()), 9.5)
-      const activeLayer = Math.min(9, Math.max(0, Math.floor(c + 0.15)))
-      // The cursor sits clamped at 0 until the tour starts, so the first
-      // card fades in with the lay-down (p 0.262-0.272) instead of showing
-      // from the act's first frame over the still-centred phone.
-      const firstEntry = Math.min(1, Math.max(0, (p - 0.262) / 0.01))
-      for (let i = 0; i < TEARDOWN_COPY.length; i++) {
+      // while the canvas runs), so copy never changes ahead of the part.
+      // Before the tour the raw cursor runs negative: the intro holds over
+      // the opening sandwich and hands over just before layer 0 arrives.
+      const raw = rawCursor(p)
+      const c = raw < 0 ? raw : Math.min(overlayCursor(cursorAt(p), performance.now()), 10)
+      const intro = introRef.current
+      if (intro !== null) {
+        const entry = Math.min(1, Math.max(0, (p - 0.252) / 0.012))
+        const exit = Math.min(1, Math.max(0, (-0.06 - raw) / 0.1))
+        show(intro, entry * exit, reduced ? 1 : entry)
+      }
+      const activeLayer = raw < -0.04 ? -1 : Math.min(last, Math.max(0, Math.floor(c + 0.04)))
+      for (let i = 0; i <= last; i++) {
         const el = cardRefs.current[i]
         if (el !== null && el !== undefined) {
+          // One card at a time: in as the part starts to arrive, out as it
+          // returns, so the copy turns over with the part (never overlaps).
           const d = c - i
-          const cursorEntry = Math.min(1, Math.max(0, (d + 0.15) / 0.15))
-          const entry = i === 0 ? Math.min(cursorEntry, firstEntry) : cursorEntry
-          const exit = Math.min(1, Math.max(0, (1 - d) / 0.1))
-          const o = entry * exit
-          el.style.opacity = String(o)
-          el.style.visibility = o <= 0.01 ? 'hidden' : 'visible'
-          el.style.transform = `translateY(${((1 - o) * 12).toFixed(2)}px)`
+          const entry = Math.min(1, Math.max(0, (d + 0.04) / 0.08))
+          const exit = i === last ? 1 : Math.min(1, Math.max(0, (0.96 - d) / 0.1))
+          // Stagger: headline, intro, then each capability, as it arrives.
+          const reveal = reduced ? 1 : Math.min(1, Math.max(0, (d + 0.04) / 0.4))
+          show(el, entry * exit, reveal)
         }
         const seg = segRefs.current[i]
         if (seg !== null && seg !== undefined) {
           seg.style.opacity = i === activeLayer ? '1' : i < activeLayer ? '0.42' : '0.14'
+          seg.style.transform = i === activeLayer ? 'scaleY(1.6)' : 'scaleY(1)'
         }
       }
     }
@@ -131,20 +199,21 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     return () => window.clearInterval(timer)
   }, [act.id])
 
-  // Auto-scroll the teardown tour (overnight watchability): one press
-  // plays the ten layer windows at ~3s per layer while the camera tours
-  // the open stack. Any manual input (wheel, touch, keys) takes over
-  // instantly. Never offered under reduced motion. Pure scroll driving —
-  // the film follows exactly.
+  // Auto-play the teardown (overnight watchability): one press opens the
+  // sandwich, holds the overview, then presents each layer for about four
+  // seconds. Any manual input (wheel, touch, keys) takes over instantly.
+  // Never offered under reduced motion. Pure scroll driving, the film
+  // follows exactly. The position accumulates in progress space: rereading
+  // a rounded scrollY each frame stalls on slow phones.
   const [playing, setPlaying] = useState(false)
   useEffect(() => {
     if (!playing) return
-    if (reducedMotion()) {
-      setPlaying(false)
-      return
-    }
+    const el = runway.current
+    const start = el === null ? null : runwayProgress(el)
+    if (el === null || start === null) return
     let raf = 0
     let last = performance.now()
+    let pos = start >= TOUR_END ? TOUR_START : start
     const stop = (): void => setPlaying(false)
     const onInterrupt = (): void => stop()
     window.addEventListener('wheel', onInterrupt, { passive: true })
@@ -154,19 +223,13 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       raf = requestAnimationFrame(step)
       const dt = Math.min(0.1, (now - last) / 1000)
       last = now
-      const el = runway.current
-      if (el === null) return
-      const rect = el.getBoundingClientRect()
-      const top = rect.top + window.scrollY
-      const span = rect.height - window.innerHeight
-      if (span <= 0) return
-      const p = (window.scrollY - top) / span
-      const np = p + (dt * 0.2) / 30
-      if (np >= 0.495 || p >= 0.52) {
+      pos += dt * playRate(pos)
+      if (pos >= TOUR_END) {
+        scrollToProgress(el, TOUR_END, 'instant')
         stop()
         return
       }
-      scrollToProgress(el, Math.max(np, 0.295), 'auto')
+      scrollToProgress(el, pos, 'instant')
     }
     raf = requestAnimationFrame(step)
     return () => {
@@ -176,6 +239,69 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       window.removeEventListener('keydown', onInterrupt)
     }
   }, [playing, runway])
+
+  // Hold settle: a scroll that comes to rest mid-move (a part half out of
+  // the stack) finishes that move in the direction of travel, so the tour
+  // always rests on one part at its pose. Only after real user input (a
+  // ?t= link, the rail and tests never settle), never while playing or
+  // under reduced motion, and any new input cancels it at once. Driven
+  // from the progress MotionValue: no scroll listeners (invariant 2).
+  const teardownActive = act.id === 'teardown'
+  useEffect(() => {
+    if (!teardownActive || playing || reducedMotion()) return
+    let lastInput = Number.NEGATIVE_INFINITY
+    let lastP = progress.get()
+    let dir = 0
+    let idle = 0
+    let raf = 0
+    let settling = false
+    const cancel = (): void => {
+      window.clearTimeout(idle)
+      cancelAnimationFrame(raf)
+      settling = false
+    }
+    const onInput = (): void => {
+      lastInput = performance.now()
+      cancel()
+    }
+    const settle = (): void => {
+      const el = runway.current
+      if (el === null || performance.now() - lastInput > 1500) return
+      const from = progress.get()
+      const to = holdTarget(from, dir)
+      if (to === null) return
+      settling = true
+      const t0 = performance.now()
+      const duration = 420 + Math.min(1, Math.abs(to - from) / 0.02) * 260
+      const frame = (now: number): void => {
+        const t = Math.min(1, (now - t0) / duration)
+        const eased = 1 - (1 - t) ** 3
+        scrollToProgress(el, from + (to - from) * eased, 'instant')
+        if (t < 1) raf = requestAnimationFrame(frame)
+        else settling = false
+      }
+      raf = requestAnimationFrame(frame)
+    }
+    const unsubscribe = progress.on('change', (p) => {
+      if (settling) return
+      if (p !== lastP) dir = p > lastP ? 1 : -1
+      lastP = p
+      window.clearTimeout(idle)
+      idle = window.setTimeout(settle, 180)
+    })
+    window.addEventListener('wheel', onInput, { passive: true })
+    window.addEventListener('touchstart', onInput, { passive: true })
+    window.addEventListener('touchmove', onInput, { passive: true })
+    window.addEventListener('keydown', onInput)
+    return () => {
+      cancel()
+      unsubscribe()
+      window.removeEventListener('wheel', onInput)
+      window.removeEventListener('touchstart', onInput)
+      window.removeEventListener('touchmove', onInput)
+      window.removeEventListener('keydown', onInput)
+    }
+  }, [teardownActive, playing, progress, runway])
 
   // Keyboard film navigation: arrows jump between acts with an aria-live
   // announcement of the act name (the chapter container below is the live
@@ -228,7 +354,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
   if (chapter === undefined) return null
   const teardown = act.id === 'teardown'
   return (
-    <div ref={rootRef} className="light-scope pointer-events-none absolute inset-0">
+    <div ref={rootRef} className="group/film light-scope pointer-events-none absolute inset-0">
       <div ref={tintRef} aria-hidden="true" className="absolute inset-0" />
       <div
         ref={scrimRef}
@@ -278,7 +404,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
         data-act={act.id}
         aria-live="polite"
         className={`absolute inset-x-0 bottom-0 px-5 md:inset-x-auto md:bottom-auto md:top-1/2 md:w-[min(27vw,28rem)] md:-translate-y-1/2 md:px-0 md:pb-0 md:data-[align=left]:left-[max(var(--page-gutter),4vw)] md:data-[align=right]:right-[calc(4vw+4.5rem)] ${
-          teardown ? 'pb-24' : 'pb-[calc(2rem+var(--sab))]'
+          teardown ? 'pb-20 md:pb-0' : 'pb-[calc(2rem+var(--sab))]'
         }`}
       >
         <div
@@ -294,43 +420,103 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
           {/* Keyed remount, no exit wait: AnimatePresence mode="wait" wedged
               on an old chapter when a long jump (e.g. /#buy from another
               page) crossed several acts faster than the exits could finish. */}
-          <motion.div key={act.id} variants={CHAPTER} initial="hidden" animate="show">
+          <motion.div
+            key={act.id}
+            variants={CHAPTER}
+            initial="hidden"
+            animate="show"
+            className={teardown ? 'flex flex-col' : undefined}
+          >
             {teardown ? (
               <>
                 <div className="grid">
+                  <div
+                    ref={introRef}
+                    data-testid="teardown-intro"
+                    className="col-start-1 row-start-1"
+                    style={{ opacity: 0, visibility: 'hidden' }}
+                  >
+                    <p className="kicker flex items-center gap-3 text-(--color-aether-strong)">
+                      <span aria-hidden="true" className="h-px w-8 bg-(--color-aether)" />
+                      {chapter.kicker}
+                    </p>
+                    <h2
+                      className="display-lg mt-3 text-[1.55rem] text-balance md:mt-4 md:text-[clamp(1.85rem,3.3vw,3.35rem)]"
+                      style={stagger(0)}
+                    >
+                      {chapter.headline}
+                    </h2>
+                    <p
+                      className="mt-3 max-w-[38ch] text-[14px] md:mt-4 leading-relaxed text-(--color-dim) md:text-[17px]"
+                      style={stagger(1)}
+                    >
+                      {chapter.body}
+                    </p>
+                    <StatGrid
+                      stats={TEARDOWN_INTRO_STATS}
+                      columns={3}
+                      className="group-data-[overview=num]/film:hidden"
+                    />
+                    {/* Legend for the numbered overview markers (phones, or
+                        wherever names do not fit beside the sandwich). */}
+                    <ol
+                      className="mt-4 hidden grid-flow-col grid-rows-5 gap-x-6 gap-y-1 border-t border-(--color-border-hairline) pt-3 font-mono text-[10.5px] tracking-[0.08em] text-(--color-ink) uppercase group-data-[overview=num]/film:grid"
+                      style={stagger(2)}
+                    >
+                      {TEARDOWN_COPY.map((copy, i) => (
+                        <li key={copy.key} className="flex gap-2">
+                          <span className="text-(--color-faint)">
+                            {String(i + 1).padStart(2, '0')}
+                          </span>
+                          {copy.name}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
                   {TEARDOWN_COPY.map((copy, i) => (
-                    <div
+                    <article
                       key={copy.key}
                       ref={(el) => {
                         cardRefs.current[i] = el
                       }}
+                      aria-label={`Layer ${i + 1} of ${TEARDOWN_COPY.length}: ${copy.name}`}
                       data-testid={`teardown-card-${copy.key}`}
                       className="col-start-1 row-start-1"
+                      style={{ opacity: 0, visibility: 'hidden' }}
                     >
-                      <p className="kicker flex items-center gap-3 text-(--color-aether-strong)">
+                      <p className="kicker flex items-center gap-2.5">
+                        <span className="text-(--color-ink) tabular-nums">
+                          {String(i + 1).padStart(2, '0')}
+                        </span>
+                        <span className="text-(--color-faint)">/ {TEARDOWN_COPY.length}</span>
                         <span
                           aria-hidden="true"
-                          className="h-px w-8"
+                          className="mx-1 h-px w-7"
                           style={{ backgroundColor: TEARDOWN_LAYERS[i]?.accent ?? '#1f5fd0' }}
                         />
-                        {copy.kicker}
+                        <span className="text-(--color-aether-strong)">{copy.name}</span>
                       </p>
-                      <h2 className="display-lg mt-4 text-[clamp(2.25rem,3.9vw,3.75rem)]">
+                      <h2
+                        className="display-lg mt-3 text-[1.5rem] text-balance md:mt-4 md:text-[clamp(1.7rem,3vw,3.1rem)]"
+                        style={stagger(0)}
+                      >
                         {copy.headline}
                       </h2>
-                      <p className="mt-4 max-w-[36ch] text-base leading-relaxed text-(--color-dim) md:text-lg">
-                        {copy.body}
+                      <p
+                        className="mt-3 max-w-[40ch] text-[14px] md:mt-4 leading-relaxed text-(--color-dim) md:text-[16.5px]"
+                        style={stagger(1)}
+                      >
+                        {copy.intro}
                       </p>
-                      <p className="mt-5 inline-flex rounded-full bg-(--color-raise)/70 px-3 py-1.5 font-mono text-[11px] tracking-[0.06em] text-(--color-ink) uppercase shadow-[0_0_0_1px_var(--color-border-hairline)]">
-                        {copy.figure}
-                      </p>
-                    </div>
+                      <StatGrid stats={copy.stats} columns={2} />
+                    </article>
                   ))}
                 </div>
-                {/* Ten layers, physical stack order: where the tour is. */}
+                {/* Ten layers, physical stack order: where the tour is. On
+                    phones the card index carries it, so the part keeps the frame. */}
                 <motion.div
                   aria-hidden="true"
-                  className="mt-8 flex items-center gap-1"
+                  className="mt-8 hidden items-center gap-1 md:flex"
                   variants={ITEM}
                 >
                   {TEARDOWN_COPY.map((copy, i) => (
@@ -339,7 +525,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                       ref={(el) => {
                         segRefs.current[i] = el
                       }}
-                      className="h-[3px] w-6 rounded-full bg-(--color-ink) transition-opacity duration-300"
+                      className="h-[3px] w-4 rounded-full bg-(--color-ink) transition-[opacity,transform] duration-300 md:w-6"
                       style={{ opacity: 0.14 }}
                     />
                   ))}
@@ -379,7 +565,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
           aria-pressed={playing}
           aria-label={playing ? 'Pause the teardown showcase' : 'Play the teardown showcase'}
           data-testid="teardown-play"
-          onClick={() => setPlaying((v) => !v)}
+          onClick={() => setPlaying((v) => !v && !reducedMotion())}
           className="btn pointer-events-auto absolute right-5 bottom-6 bg-(--color-raise)/85 text-sm shadow-[0_0_0_1px_var(--color-border-hairline),0_10px_30px_-14px_rgba(40,30,10,0.4)] backdrop-blur-md md:right-[calc(4vw+4.5rem)] md:bottom-10"
         >
           {playing ? (

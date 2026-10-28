@@ -11,15 +11,27 @@ import { computeFilmStates } from './states.ts'
 import { actAt } from './timeline.ts'
 import { LAYER_GAP, LAYER_GAP_COMPACT, TEARDOWN_LAYERS } from './teardown/layers.ts'
 import {
-  dampAimOffset,
   dampTeardownScalars,
   driveShellLayers,
-  teardownAimGoal,
-  type AimOffset,
   type ShellGroups,
   type TeardownScalars,
 } from './teardown/transform.ts'
-import { featureAnchorBridge } from './overlay/callouts.ts'
+import {
+  composeLayerPose,
+  computeShowcaseState,
+  createLayerPoses,
+  createRigCamera,
+  createShowcaseState,
+  resolveSlot,
+  slideDirection,
+  solvePresentPose,
+  solveShowcaseRig,
+  tourCursorAt,
+} from './teardown/showcase.ts'
+import { SHOWCASE_LAYERS } from './teardown/showcaseLayers.ts'
+import { dieLiftFor, writeShowcaseBridge } from './teardown/bridgeWriter.ts'
+import { LID_SLOT } from './teardown/ShowcaseDimmer.tsx'
+import { cursorBridge } from './overlay/callouts.ts'
 import { filmTargetFov, sampleFilm, type FovScratch } from './sample.ts'
 import {
   GLASS_SCREEN_ON_OPACITY,
@@ -76,6 +88,12 @@ const SHELL_MATS = [
   'regulatory',
   'focusRing',
   'flashGlass',
+  'midplate',
+  'flex',
+  'driverIc',
+  'glassRim',
+  'glassGlint',
+  'glassSheen',
 ] as const satisfies ReadonlyArray<keyof PhoneMaterialSet>
 
 /** Bezel and edge hardware dials out harder so it never paints over internals. */
@@ -139,6 +157,12 @@ function capRotation(
   return capAngularStep(current, current + (goal - current) * damp, maxVelocity, delta)
 }
 
+/** Smoothstep on a clamped input. */
+function smooth01(t: number): number {
+  const c = Math.min(1, Math.max(0, t))
+  return c * c * (3 - 2 * c)
+}
+
 /** Parks a shell group at rest. */
 function parkGroup(grp: THREE.Group | null): void {
   if (grp === null) return
@@ -157,6 +181,9 @@ const BASE_OPACITY: Partial<Record<keyof PhoneMaterialSet, number>> = {
   flashDiffuser: 0.75,
   tofWindow: 0.88,
   focusRing: 0,
+  glassRim: 0,
+  glassGlint: 0,
+  glassSheen: 0,
 }
 
 /**
@@ -172,6 +199,9 @@ const NO_DEPTH_WRITE: ReadonlySet<string> = new Set([
   'periscopeGlass',
   'flashDiffuser',
   'tofWindow',
+  'glassRim',
+  'glassGlint',
+  'glassSheen',
 ])
 
 /**
@@ -233,9 +263,19 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     prepared: false,
     slide: new THREE.Vector3(),
     reducedQuery: null as MediaQueryList | null,
-    td: { sep: 0, cursor: 0, ready: false } as TeardownScalars,
-    aim: { x: 0, y: 0, z: 0, ready: false },
-    aimGoal: { x: 0, y: 0, z: 0 } as AimOffset,
+    td: { sep: 0, tour: -3, cursor: 0, ready: false } as TeardownScalars,
+    show: createShowcaseState(),
+    rig: createRigCamera(),
+    poses: createLayerPoses(),
+    present: { pos: new THREE.Vector3(), quat: new THREE.Quaternion() },
+    slideDir: new THREE.Vector3(1, 0, 0),
+    slot: { x0: 0, x1: 0, y0: 0, y1: 0 },
+    goalPos: new THREE.Vector3(),
+    goalTarget: new THREE.Vector3(),
+    flex: null as THREE.Object3D | null,
+    glassDark: new THREE.Color(),
+    glassClear: new THREE.Color('#9fb2c6'),
+    glassEnv: 0.55,
     shell: { frame: null, back: null, glass: null, display: null, module: null } as ShellGroups,
   })
 
@@ -246,6 +286,10 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
       for (const name of SHELL_MATS) {
         materials[name].transparent = true
       }
+      // The cover glass's own tint and reflection, restored whenever it is
+      // not presented.
+      s.glassDark.copy(materials.screen.color)
+      s.glassEnv = materials.screen.envMapIntensity
     }
     // One MediaQueryList for the life of the director, not one per frame.
     s.reducedQuery ??= window.matchMedia(REDUCED_QUERY)
@@ -254,77 +298,31 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     const t = sampleFilm(p)
     const st = computeFilmStates(p)
     const act = actAt(p).id
-    // Teardown motion rides one pair of damped scalars shared by every
+    // Teardown motion rides one set of damped scalars shared by every
     // layer (shell here, internals via the control plane), so no two
-    // neighbours ever lag by different amounts.
-    dampTeardownScalars(s.td, st.stackSeparate, st.layerCursor, delta, reduced)
+    // neighbours ever lag by different amounts. The showcase state (which
+    // layer is presented, its slide/flight, focus, dimming) derives from
+    // those same scalars, so copy, labels, and motion always agree.
+    dampTeardownScalars(s.td, st.stackSeparate, tourCursorAt(p), delta, reduced)
     const tdSep = s.td.sep
-    const tdCursor = s.td.cursor
-    // Featured teardown layer, derived once per frame (round 03 Part C)
-    // from the damped cursor the layers move on: the lighting, the aim, the
-    // pointer anchor, and the overlay copy all follow this one cursor.
-    const featured = tdCursor > 0.02 && tdCursor < 9.99 ? Math.min(9, Math.floor(tdCursor)) : -1
-    featureAnchorBridge.cursor = tdCursor
-    featureAnchorBridge.cursorStamp = performance.now()
+    const show = computeShowcaseState(s.show, s.td.tour, tdSep)
+    const featured = show.layer
+    cursorBridge.cursor = s.td.cursor
+    cursorBridge.stamp = performance.now()
+    const gap = state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP
 
     const shot = SHOTS[act] ?? SHOTS.arrival
     const damp = reduced ? 1 : 1 - Math.exp(-delta * shot.dampPerSecond)
     const lookDamp = reduced ? 1 : 1 - Math.exp(-delta * shot.targetDampPerSecond)
-
-    const cam = state.camera as THREE.PerspectiveCamera
-    // Position glides: a hard flick through a fast move (battery exit runs
-    // 0.2m in 0.006 of progress) travels instead of teleporting. Tracks
-    // smooth scroll invisibly at 7/s; snaps under reduced motion.
-    if (reduced || !s.camReady) {
-      s.camPos.copy(t.pos)
-      s.camReady = true
-      cam.position.copy(t.pos)
-    } else {
-      const pd = 1 - Math.exp(-delta * 7)
-      s.camPos.x += (t.pos.x - s.camPos.x) * pd
-      s.camPos.y += (t.pos.y - s.camPos.y) * pd
-      s.camPos.z += (t.pos.z - s.camPos.z) * pd
-      cam.position.copy(s.camPos)
-    }
-    // Aim settles late: damped slower than pose so the eye leads.
-    s.look.x += (t.target.x - s.look.x) * lookDamp
-    s.look.y += (t.target.y - s.look.y) * lookDamp
-    s.look.z += (t.target.z - s.look.z) * lookDamp
-    // Pointer parallax: small clamped offset applied at lookAt time, never
-    // stored, so it cannot accumulate inside the damped aim.
-    const parallaxX = reduced ? 0 : THREE.MathUtils.clamp(refs.parallaxX.get(), -0.5, 0.5) * 0.016
-    const parallaxY = reduced ? 0 : THREE.MathUtils.clamp(refs.parallaxY.get(), -0.5, 0.5) * 0.012
-    // Teardown aim: tour drift toward the featured slot, the camera-layer
-    // slide follow, and the portrait drop, summed into one goal that one
-    // persistent offset damps toward (teardownAimGoal). Applied at lookAt
-    // like the parallax, so nothing accumulates inside the damped aim.
     const aspect = state.size.width / Math.max(1, state.size.height)
-    const hero = refs.hero.current
-    if (hero !== null) {
-      teardownAimGoal(
-        s.aimGoal,
-        act === 'teardown',
-        featured,
-        tdSep,
-        tdCursor,
-        state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP,
-        aspect,
-        hero.quaternion,
-        hero.scale.x,
-        s.slide,
-      )
-      dampAimOffset(s.aim, s.aimGoal, lookDamp)
-    }
-    const lookX = s.look.x + s.aim.x + parallaxX
-    const lookY = s.look.y + s.aim.y + parallaxY
-    const lookZ = s.look.z + s.aim.z
-    cam.lookAt(lookX, lookY, lookZ)
+    const cam = state.camera as THREE.PerspectiveCamera
 
     const bx = centerBias(aspect, 'x')
     const by = centerBias(aspect, 'y')
     const px = t.fit !== null ? t.px * bx : t.px
     const py = t.fit !== null ? t.py * by : t.py
 
+    // Hero pose first: the showcase rig frames the stack through it.
     const g = refs.hero.current
     if (g !== null) {
       if (reduced) {
@@ -345,10 +343,10 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
         g.position.x += (px - g.position.x) * damp
         g.position.y += (py - g.position.y) * damp
       }
+      g.updateWorldMatrix(true, false)
       // Internals ride the hero transform exactly: without this lock the
-      // exploded parts sit in unrotated space while the shell turns, which
-      // reads as parts scattered everywhere. Copies the damped values, so
-      // the lock itself can never pop or desync on reverse scrub.
+      // exploded parts sit in unrotated space while the shell turns. Copies
+      // the damped values, so the lock can never pop or desync on reverse.
       const ig = refs.internals.current
       if (ig !== null) {
         ig.position.copy(g.position)
@@ -357,6 +355,42 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
       }
     }
 
+    // Showcase rig: while the sandwich is open the camera frames it from a
+    // fixed look direction (overview right of the copy, then the dimmed
+    // stack slid aside while each layer is presented), blended in and out
+    // with the separation so the keyed camera hands over without a cut.
+    const rigW = g !== null ? smooth01(tdSep / 0.5) : 0
+    s.goalPos.copy(t.pos)
+    s.goalTarget.copy(t.target)
+    if (g !== null && rigW > 0) {
+      solveShowcaseRig(s.rig, g.matrixWorld, tdSep, gap, aspect, show)
+      s.goalPos.lerp(s.rig.pos, rigW)
+      s.goalTarget.lerp(s.rig.target, rigW)
+    }
+
+    // Position glides: a hard flick through a fast move travels instead of
+    // teleporting. Tracks smooth scroll invisibly at 7/s; snaps under
+    // reduced motion.
+    if (reduced || !s.camReady) {
+      s.camPos.copy(s.goalPos)
+      s.camReady = true
+      cam.position.copy(s.goalPos)
+    } else {
+      s.camPos.lerp(s.goalPos, 1 - Math.exp(-delta * 7))
+      cam.position.copy(s.camPos)
+    }
+    // Aim settles late: damped slower than pose so the eye leads.
+    s.look.x += (s.goalTarget.x - s.look.x) * lookDamp
+    s.look.y += (s.goalTarget.y - s.look.y) * lookDamp
+    s.look.z += (s.goalTarget.z - s.look.z) * lookDamp
+    // Pointer parallax: small clamped offset applied at lookAt time, never
+    // stored, so it cannot accumulate inside the damped aim. The showcase
+    // holds still under the copy, so parallax fades out with the rig.
+    const parallaxW = reduced ? 0 : 1 - rigW
+    const parallaxX = THREE.MathUtils.clamp(refs.parallaxX.get(), -0.5, 0.5) * 0.016 * parallaxW
+    const parallaxY = THREE.MathUtils.clamp(refs.parallaxY.get(), -0.5, 0.5) * 0.012 * parallaxW
+    cam.lookAt(s.look.x + parallaxX, s.look.y + parallaxY, s.look.z)
+
     const distance = cam.position.distanceTo(s.look)
     s.fov.cam[0] = cam.position.x
     s.fov.cam[1] = cam.position.y
@@ -364,17 +398,17 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     s.fov.tgt[0] = s.look.x
     s.fov.tgt[1] = s.look.y
     s.fov.tgt[2] = s.look.z
-    const stackGap = state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP
-    const targetFov = filmTargetFov(
+    const keyedFov = filmTargetFov(
       t,
       p,
       aspect,
-      stackGap,
+      gap,
       tdSep,
       distance,
       reduced ? null : st.layerCursor,
       s.fov,
     )
+    const targetFov = keyedFov + (s.rig.fov - keyedFov) * rigW
     if (reduced) {
       if (Math.abs(cam.fov - targetFov) > 0.001) {
         cam.fov = targetFov
@@ -426,6 +460,16 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
       0.05,
       1 - st.screenOn * (1 - GLASS_SCREEN_ON_OPACITY) - st.shellGhost * 0.36,
     )
+    // Presented cover glass (round 05b): from the dark mirror to near-clear
+    // glass with a faint cool tint, stronger reflections, a bright 2.5D rim
+    // and a reflection sheen, as it flies to its hero pose.
+    const glassShow = show.layer === 0 ? show.fly : 0
+    materials.screen.opacity += (0.2 - materials.screen.opacity) * glassShow
+    materials.screen.color.copy(s.glassDark).lerp(s.glassClear, glassShow)
+    materials.screen.envMapIntensity = s.glassEnv + (1.4 - s.glassEnv) * glassShow
+    materials.glassRim.opacity = 0.9 * glassShow
+    materials.glassGlint.opacity = 0.85 * glassShow
+    materials.glassSheen.opacity = 0.75 * glassShow
 
     // Live screen mode per act.
     const mode: ScreenMode =
@@ -447,8 +491,8 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     materials.display.emissiveIntensity = st.screenOn * dim * (act === 'display' ? 1.35 : 0.95)
     // Macro atmosphere lifts the sensor shimmer at the holds. The featured
     // camera layer lifts it further so the featured part pops.
-    const featuredCamera =
-      st.stackSeparate > 0.001 && st.layerCursor > 7.02 && st.layerCursor < 8.99 ? 1 : 0
+    // The rear panel's presentation lifts the sensor shimmer under the bump.
+    const featuredCamera = show.layer === 9 ? show.focus : 0
     materials.sensorGlint.emissiveIntensity = 1.4 + st.macroAtmos * 0.8 + featuredCamera
 
     // Lighting state damped per act.
@@ -505,31 +549,76 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     c.shieldLift = st.shieldLift
     c.coilRing = st.coilRing
     c.stackSeparate = tdSep
-    c.layerCursor = tdCursor
-    c.featureCursor = tdCursor
-    c.teardownGap = state.size.width < 900 ? LAYER_GAP_COMPACT : LAYER_GAP
+    c.teardownGap = gap
     c.reducedMotion = reduced
+    c.showcaseLayer = show.layer
+    c.showcaseFocus = show.focus
+    c.dieLift = dieLiftFor(show)
+    for (let i = 0; i < 10; i++) c.layerAlpha[i] = show.alpha[i] ?? 1
+    c.layerAlpha[LID_SLOT] = show.lidAlpha * (show.alpha[5] ?? 1)
 
-    // Teardown layer driver (sandwich rewrite, Prompt D sections 4-5):
-    // shell groups sit exactly on their peel-staggered slots for the shared
-    // damped scalars; the camera layer slides out and turns only during its
-    // own beat.
-    // Shared with layerStack.test.tsx (driveShellLayers), so the test runs
-    // the shipped path.
-    const teardownSep = tdSep
-    if (teardownSep > 0.001) {
+    // Teardown layer poses (round 05 showcase): every layer on its slot in
+    // the open sandwich; the presented one slides out of the footprint in
+    // its own plane, then flies to its hero pose framed beside the copy.
+    // One pose per layer, shared by the shell driver here and Internals
+    // (layerStack.test.tsx runs the same composition).
+    const hero = refs.hero.current
+    const layer = show.layer
+    const moving = hero !== null && layer >= 0 && (show.slide > 0 || show.fly > 0)
+    if (moving) {
+      const def = SHOWCASE_LAYERS[layer]
+      if (def !== undefined) {
+        const drift = Math.min(1, Math.max(0, (show.d - 0.2) / 0.6))
+        // Fit to the overlay's free slot (measured on resize, never per frame).
+        resolveSlot(s.slot, aspect)
+        solvePresentPose(s.present, def, s.rig, hero.matrixWorld, drift, s.slot)
+        slideDirection(s.slideDir, s.rig, hero.matrixWorld)
+      }
+    }
+    for (let i = 0; i < 10; i++) {
+      const mine = moving && i === layer
+      composeLayerPose(
+        s.poses[i] as (typeof s.poses)[number],
+        i,
+        tdSep,
+        gap,
+        mine ? show.slide : 0,
+        mine ? show.fly : 0,
+        mine ? s.present : null,
+        s.slideDir,
+      )
+    }
+    c.poses = s.poses
+    if (tdSep > 0.001) {
       const shell = s.shell
       shell.frame = refs.frame.current
       shell.back = refs.back.current
       shell.glass = refs.glass.current
       shell.display = refs.display.current
       shell.module = refs.module.current
-      driveShellLayers(shell, teardownSep, c.teardownGap, tdCursor)
+      driveShellLayers(shell, s.poses)
     } else {
       // No legacy writer owns frame, display, or module: park them exactly.
       parkGroup(refs.frame.current)
       parkGroup(refs.display.current)
       parkGroup(refs.module.current)
+    }
+    // Display flex: folded behind the panel, unfolding below it as the
+    // display flies to its hero pose (driver IC on show).
+    const displayGroup = refs.display.current
+    if (s.flex === null && displayGroup !== null) {
+      s.flex = displayGroup.getObjectByName('display-flex') ?? null
+    }
+    if (s.flex !== null) s.flex.rotation.x = Math.PI * (1 - (layer === 1 ? show.fly : 0))
+    if (hero !== null) {
+      writeShowcaseBridge(
+        show,
+        s.poses,
+        hero.matrixWorld,
+        cam.position,
+        c.dieLift,
+        performance.now(),
+      )
     }
 
     // Hover inspection during the x-ray pass only.

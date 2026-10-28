@@ -172,7 +172,9 @@ export const TEARDOWN_LAYERS: TeardownLayer[] = [
   {
     id: 'camera',
     index: 8,
-    shell: ['module'],
+    // The camera bump (shell module) is bonded to the rear panel and nests
+    // in its group; this layer is the internal camera modules.
+    shell: [],
     parts: [
       'camera-module',
       'lens-main',
@@ -203,10 +205,15 @@ export const TEARDOWN_LAYERS: TeardownLayer[] = [
   },
 ]
 
-/** Gap between adjacent layers at full separation, exaggerated like a service diagram. */
-export const LAYER_GAP = 0.0085
-/** Tighter gap on narrow viewports so the stack fits. */
-export const LAYER_GAP_COMPACT = 0.0065
+/**
+ * Gap between adjacent layers at full separation (round 05 showcase): the
+ * sandwich opens wide enough that, seen from the tour camera, no two
+ * layers' outlines overlap by more than ~25%, so every face reads in the
+ * overview. It was 8.5mm, where the stack read as one block of strata.
+ */
+export const LAYER_GAP = 0.034
+/** Narrow viewports: the showcase rig frames the stack, so the gap can stay wide. */
+export const LAYER_GAP_COMPACT = 0.034
 
 /**
  * Layer offset = ((count - 1) / 2 - index) * gap * separation. Front layers
