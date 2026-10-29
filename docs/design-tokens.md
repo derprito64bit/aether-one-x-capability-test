@@ -24,6 +24,38 @@ of a yellow page. One theme for the whole site (light), one accent.
 The film stage colours live in `src/film/lighting.ts` (same family, per act;
 display stays the brightest act).
 
+## Section rooms (film, 2026-10-28)
+
+The owner found the film "floating in space": every act used the same
+porcelain sweep. Each act now has a room (`src/film/backdrop/`), so the
+film reads light studio, then a dark show room for the capabilities, then
+light again for the purchase:
+
+| Act      | Room      | Base                   | Accent            | Back-wall figure     |
+| -------- | --------- | ---------------------- | ----------------- | -------------------- |
+| arrival  | studio    | 3D porcelain sweep     | cobalt            | none                 |
+| settle   | titanium  | `#f0f1f3` to `#d0d4da` | brushed sheen     | Ti-6Al-4V (milled)   |
+| approach | glass     | `#f7fafd` to `#d4dde8` | light streaks     | 1.45 mm (outline)    |
+| teardown | studio    | 3D porcelain sweep     | per-layer accents | none                 |
+| camera   | projector | `#060709`              | cool white beam   | 50 MP (projected)    |
+| display  | spectrum  | `#040507`              | full hue band     | 144 Hz, 1.07B, 2,800 |
+| storage  | data      | `#070b17` navy         | `#708eff` hex     | 1 TB                 |
+| battery  | charge    | `#050706` graphite     | `#3ee08f` level   | 4,000 mAh            |
+| software | os        | `#0b0d13` slate        | soft cool white   | 2.0 AetherOS         |
+| ai       | neural    | `#04060c`              | `#4d7dff` dots    | 46 TOPS              |
+| final    | studio    | 3D porcelain sweep     | cobalt            | none                 |
+
+Rules:
+
+- One accent per room, and it never appears in another room; the cobalt
+  brand accent stays on copy and controls everywhere.
+- Copy follows the room: `.light-scope` ink on light rooms, `.dark-scope`
+  on dark ones; the copy veil (`--veil-rgb`) blends with the room.
+- Figures are Geist Mono, decoded in (scramble) as their room takes over,
+  sized by length to about 55% of the frame and hung opposite the copy.
+- Everything is a pure function of progress: transforms and opacity
+  driven by the act's local progress `--t`; blurred layers only translate.
+
 ## Contrast (measured, WCAG relative luminance)
 
 | Foreground                                 | night | surface | sunken | darkest stage `#d9d5cb` | Use                     |

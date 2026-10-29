@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary.tsx'
 import { ScrollManager } from './components/ScrollManager.tsx'
+import { SectionSettle } from './components/SectionSettle.tsx'
 import { Footer } from './components/layout/Footer.tsx'
 import { Navbar } from './components/layout/Navbar.tsx'
 
@@ -42,6 +43,7 @@ export function App() {
         Skip to content
       </a>
       <ScrollManager />
+      <SectionSettle />
       <Navbar />
       <main id="main">
         <Suspense

@@ -32,6 +32,7 @@ import { SHOWCASE_LAYERS } from './teardown/showcaseLayers.ts'
 import { dieLiftFor, writeShowcaseBridge } from './teardown/bridgeWriter.ts'
 import { LID_SLOT } from './teardown/ShowcaseDimmer.tsx'
 import { cursorBridge } from './overlay/callouts.ts'
+import { blendSceneLight, createSceneLight, type BlendedRoomLight } from './sceneLighting.ts'
 import { filmTargetFov, sampleFilm, type FovScratch } from './sample.ts'
 import {
   GLASS_SCREEN_ON_OPACITY,
@@ -157,6 +158,27 @@ function capRotation(
   return capAngularStep(current, current + (goal - current) * damp, maxVelocity, delta)
 }
 
+/**
+ * Points a room light at the subject from its camera-space direction, so
+ * it holds its place in the frame wherever the camera orbits.
+ */
+function aimRoomLight(
+  light: THREE.DirectionalLight | null,
+  room: BlendedRoomLight,
+  cam: THREE.Camera,
+  subject: THREE.Vector3,
+  scratch: THREE.Vector3,
+): void {
+  if (light === null) return
+  light.intensity = room.intensity
+  light.color.copy(room.color)
+  if (room.intensity <= 0) return
+  scratch.copy(room.dir).applyQuaternion(cam.quaternion)
+  light.position.copy(subject).addScaledVector(scratch, 2)
+  light.target.position.copy(subject)
+  light.target.updateMatrixWorld()
+}
+
 /** Smoothstep on a clamped input. */
 function smooth01(t: number): number {
   const c = Math.min(1, Math.max(0, t))
@@ -223,6 +245,11 @@ export interface FilmRefs {
   fillLight: MutableRefObject<THREE.DirectionalLight | null>
   rimLight: MutableRefObject<THREE.DirectionalLight | null>
   accentLight: MutableRefObject<THREE.DirectionalLight | null>
+  ambientLight: MutableRefObject<THREE.AmbientLight | null>
+  /** Section-scene room lights (sceneLighting.ts), camera-relative. */
+  roomKey: MutableRefObject<THREE.DirectionalLight | null>
+  roomRimL: MutableRefObject<THREE.DirectionalLight | null>
+  roomRimR: MutableRefObject<THREE.DirectionalLight | null>
   opticsSeparation: MutableRefObject<Record<string, THREE.Group | null>>
   screenMode: { current: ScreenMode }
   screenBrightness: { current: number }
@@ -273,6 +300,9 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     goalPos: new THREE.Vector3(),
     goalTarget: new THREE.Vector3(),
     flex: null as THREE.Object3D | null,
+    room: createSceneLight(),
+    roomDir: new THREE.Vector3(),
+    heroWorld: new THREE.Vector3(),
     glassDark: new THREE.Color(),
     glassClear: new THREE.Color('#9fb2c6'),
     glassEnv: 0.55,
@@ -513,15 +543,31 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     s.accentColor.lerp(s.accentTarget, ld)
     const accentGoal = featured >= 0 ? 1.4 : (act === 'camera' ? 1.6 : 0) + st.focusPull * 0.8
     s.accent += (accentGoal - s.accent) * ld
-    if (refs.keyLight.current !== null) refs.keyLight.current.intensity = s.key
-    if (refs.fillLight.current !== null) refs.fillLight.current.intensity = s.fill
-    if (refs.rimLight.current !== null) refs.rimLight.current.intensity = s.rim
+    // Section-scene room (round 06): the light rooms keep the studio rig;
+    // dark rooms dim it and light the phone like the room behind it. Pure
+    // function of progress (sceneWeights), no damping.
+    const room = blendSceneLight(p, s.room)
+    const studio = room.studio
+    if (refs.keyLight.current !== null) refs.keyLight.current.intensity = s.key * studio
+    if (refs.fillLight.current !== null) refs.fillLight.current.intensity = s.fill * studio
+    if (refs.rimLight.current !== null) refs.rimLight.current.intensity = s.rim * studio
     if (refs.accentLight.current !== null) {
-      refs.accentLight.current.intensity = s.accent
+      // The camera act's collar rake survives the projector room at half.
+      refs.accentLight.current.intensity = s.accent * Math.max(studio, 0.5)
       refs.accentLight.current.color.copy(s.accentColor)
     }
+    if (refs.ambientLight.current !== null) {
+      refs.ambientLight.current.intensity = 0.35 * (0.25 + 0.75 * studio)
+    }
+    const heroGroup = refs.hero.current
+    if (heroGroup !== null) heroGroup.getWorldPosition(s.heroWorld)
+    else s.heroWorld.set(0, 0, 0)
+    aimRoomLight(refs.roomKey.current, room.key, cam, s.heroWorld, s.roomDir)
+    aimRoomLight(refs.roomRimL.current, room.rimL, cam, s.heroWorld, s.roomDir)
+    aimRoomLight(refs.roomRimR.current, room.rimR, cam, s.heroWorld, s.roomDir)
+    state.scene.environmentIntensity = room.env
     for (const name of ENV_MATS) materials[name].envMapIntensity = s.env
-    state.gl.toneMappingExposure = t.exposure * light.exposure
+    state.gl.toneMappingExposure = t.exposure * light.exposure * room.exposure
 
     // Optical separation: cover, collar, barrel, element, sensor open in
     // sequence over the optics beat (Prompt B section 5.2). Outward is -z.

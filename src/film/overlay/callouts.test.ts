@@ -35,13 +35,14 @@ describe('resolveColumn', () => {
 
 describe('calloutReveal', () => {
   it('staggers labels in order and follows focus out', () => {
-    expect(calloutReveal(0.2, 0, 1)).toBe(0)
+    expect(calloutReveal(0.3, 0, 1)).toBe(0)
     expect(calloutReveal(0.5, 0, 1)).toBe(1)
     // The fourth label is still arriving when the first is fully in.
-    expect(calloutReveal(0.36, 0, 1)).toBe(1)
-    expect(calloutReveal(0.36, 3, 1)).toBe(0)
-    expect(calloutReveal(0.7, 3, 1)).toBe(1)
+    expect(calloutReveal(0.4, 0, 1)).toBe(1)
+    expect(calloutReveal(0.4, 3, 1)).toBe(0)
+    // All four are in before the hold ends (0.70).
+    expect(calloutReveal(0.58, 3, 1)).toBe(1)
     // Everything leaves with the part.
-    expect(calloutReveal(0.7, 0, 0.25)).toBeCloseTo(0.25, 5)
+    expect(calloutReveal(0.6, 0, 0.25)).toBeCloseTo(0.25, 5)
   })
 })

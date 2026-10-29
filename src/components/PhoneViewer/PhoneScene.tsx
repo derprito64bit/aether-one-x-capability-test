@@ -48,10 +48,12 @@ export function PhoneScene({ pose = 'hero', label, detail = 'high' }: PhoneScene
   const size = useThree((state) => state.size)
   const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera
   const target = useMemo(() => POSES[pose], [pose])
-  // TEMP-DEBUG diagnosis hook. Removed before merge.
+  // Dev-only probe hook (scripts/probe.mjs and live console probes):
+  // window.__scene and __ray. Compiled out of production builds.
   const debugScene = useThree((state) => state.scene)
   const debugCamera = useThree((state) => state.camera)
   useEffect(() => {
+    if (!import.meta.env.DEV) return
     const w = window as unknown as {
       __scene?: THREE.Scene
       __ray?: (x: number, y: number) => string

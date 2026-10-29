@@ -19,8 +19,14 @@ import {
  * transform, and the viewport aspect. Zero allocation: module scratch.
  *
  * Tour cursor u = (p - 0.295) / 0.02, unclamped: u < 0 is the overview,
- * layer i owns u in [i, i + 1), and d = u - i runs its beat:
- *   arrive 0 -> 0.2 (slide out, fly, turn), hold 0.2 -> 0.8, leave 0.8 -> 1.
+ * layer i owns u in [i, i + 1), and d = u - i runs its beat (round 06,
+ * slower and smoother than the round 05 pop-out):
+ *   arrive 0 -> 0.30: slide out of the footprint over 0 -> 0.14, then the
+ *     flight (overlapped, 0.10 -> 0.30) on a gentle arc to the hero pose;
+ *   hold 0.30 -> 0.70;
+ *   leave 0.70 -> 1: the exact mirror.
+ * Every ramp is smootherstep (6t^5 - 15t^4 + 10t^3): zero velocity and
+ * zero acceleration at both ends, so nothing pops in or out.
  */
 export const SHOWCASE_TIMING = {
   /** Stack separation ramps (p): open wide, then close for the stand-up. */
@@ -38,26 +44,57 @@ export const SHOWCASE_DIM = 0.15
 
 const smooth = smoothstep
 
+/** Smootherstep on a clamped input: 6t^5 - 15t^4 + 10t^3. */
+export function smoother(t: number): number {
+  const x = Math.min(1, Math.max(0, t))
+  return x * x * x * (x * (x * 6 - 15) + 10)
+}
+
+/** Beat phase windows (fractions of one layer's beat). */
+export const BEAT = {
+  slideEnd: 0.14,
+  flyStart: 0.1,
+  flyEnd: 0.3,
+  focusIn: 0.2,
+  focusFull: 0.32,
+} as const
+
 /** Unclamped tour cursor at progress p (clamped to a sane band). */
 export function tourCursorAt(p: number): number {
   return Math.min(12, Math.max(-3, (p - SHOWCASE_TIMING.tourStart) / SHOWCASE_TIMING.layerSpan))
 }
 
-/** Linear out-of-slot travel for beat position d: 0 home, 1 at the hero pose. */
-export function layerTravel(d: number): number {
+/**
+ * Distance into the beat from its nearer end (arrive from 0, leave from 1),
+ * so the leave is the arrive played backwards. 0 outside the beat.
+ */
+function beatEdge(d: number): number {
   if (d <= 0 || d >= 1) return 0
-  return Math.min(1, d / 0.2, (1 - d) / 0.2)
+  return Math.min(d, 1 - d)
 }
 
-/** Presentation focus: 0 at d = 0.12, 1 from 0.24 to 0.78, 0 by 0.9. */
+/** Slide out of the footprint: 0 home, 1 clear, over the first 14%. */
+export function layerSlide(d: number): number {
+  return smoother(beatEdge(d) / BEAT.slideEnd)
+}
+
+/** Flight to the hero pose (and the turn), 10% -> 30% of the beat. */
+export function layerFly(d: number): number {
+  return smoother((beatEdge(d) - BEAT.flyStart) / (BEAT.flyEnd - BEAT.flyStart))
+}
+
+/** Presentation focus: 0 at d = 0.20, 1 from 0.32 to 0.68, 0 by 0.80. */
 export function layerFocus(d: number): number {
-  return Math.min(smooth((d - 0.12) / 0.12), 1 - smooth((d - 0.78) / 0.12))
+  const range = BEAT.focusFull - BEAT.focusIn
+  return Math.min(
+    smoother((d - BEAT.focusIn) / range),
+    1 - smoother((d - (1 - BEAT.focusFull)) / range),
+  )
 }
 
 /** The presented layer's own brightness over its beat (others stay dim). */
 export function layerLit(d: number): number {
-  if (d <= 0 || d >= 1) return 0
-  return Math.min(smooth(d / 0.1), 1 - smooth((d - 0.9) / 0.1))
+  return smoother(beatEdge(d) / 0.12)
 }
 
 /** Overview hold: after the sandwich opens, before layer 0 arrives. */
@@ -68,18 +105,18 @@ export function overviewWeight(u: number, sep: number): number {
 
 /** How far the tour owns the frame: dims the stack, slides it aside. */
 export function tourWeight(u: number): number {
-  return Math.min(smooth(u / 0.1), 1 - smooth((u - 9.9) / 0.1))
+  return Math.min(smoother(u / 0.12), 1 - smoother((u - 9.88) / 0.12))
 }
 
 /**
  * Camera travel level along the stack (a layer index, fractional between
  * beats): constant through each hold, easing to the next layer across the
- * leave/arrive seam (d 0.8 -> 1.2).
+ * whole leave/arrive seam (d 0.7 -> 1.3).
  */
 export function cameraLevel(u: number): number {
-  const a = u - 0.8
+  const a = u - 0.7
   const k = Math.floor(a)
-  const level = k + smooth((a - k) / 0.4)
+  const level = k + smoother((a - k) / 0.6)
   return Math.min(9, Math.max(0, level))
 }
 
@@ -129,9 +166,8 @@ export function computeShowcaseState(out: ShowcaseState, u: number, sep: number)
   out.layer = layer
   out.d = layer >= 0 ? u - layer : 0
   // Never present a part while the stack is still (or again) closing.
-  const travel = layer >= 0 ? layerTravel(out.d) * open : 0
-  out.slide = smooth(travel / 0.45)
-  out.fly = smooth((travel - 0.45) / 0.55)
+  out.slide = layer >= 0 ? layerSlide(out.d) * open : 0
+  out.fly = layer >= 0 ? layerFly(out.d) * open : 0
   out.focus = layer >= 0 ? layerFocus(out.d) * open : 0
   out.overview = overviewWeight(u, sep)
   out.tour = tourWeight(u) * open
@@ -518,6 +554,8 @@ export function slideClearance(def: ShowcaseLayerDef, dir: THREE.Vector3): numbe
 }
 
 const Q_ID = new THREE.Quaternion()
+/** Flight arc bow: the midpoint rises this share of the flight distance. */
+const ARC_LIFT = 0.2
 const C_SLIDE = new THREE.Vector3()
 const C_PRESENT = new THREE.Vector3()
 
@@ -555,7 +593,13 @@ export function composeLayerPose(
     .applyQuaternion(present.quat)
     .add(present.pos)
   out.quat.slerpQuaternions(Q_ID, present.quat, fly)
+  // A gentle arc, not a straight snap: a quadratic path whose midpoint
+  // rises along the stack axis by a fifth of the flight. The bow is pure
+  // z (hero-local), so in plan the path stays the straight line between
+  // two points outside the footprint, and never re-enters the stack.
+  const lift = ARC_LIFT * C_SLIDE.distanceTo(C_PRESENT)
   C_SLIDE.lerp(C_PRESENT, fly)
+  C_SLIDE.z += 2 * fly * (1 - fly) * lift
   C_LOCAL.set(def.center[0], def.center[1], def.center[2]).applyQuaternion(out.quat)
   out.pos.copy(C_SLIDE).sub(C_LOCAL)
   return out

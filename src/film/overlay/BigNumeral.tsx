@@ -1,28 +1,34 @@
 import { motion } from 'motion/react'
-import { useCountUp } from '../../hooks/useCountUp.ts'
+import { ScrambleText } from '../../components/ScrambleText.tsx'
 import type { ChapterNumeral } from '../chapters.ts'
 import { ITEM } from './motion.ts'
 
 /**
- * Big display numeral with a count-up on chapter entry. Non-numeric values
- * (e.g. "12,480") parse to their digits; anything unparsable renders static.
+ * Big code-set numeral that decodes on chapter entry. `quiet` keeps it
+ * for assistive tech only: acts whose room already projects the figure
+ * behind the phone (see backdrop/Backdrop.tsx) do not show it twice.
  */
 export function BigNumeral({
   numeral,
-  active = true,
+  quiet = false,
 }: {
   numeral: ChapterNumeral
-  active?: boolean
+  /** true: assistive tech only; 'desktop': shown on phones only. */
+  quiet?: boolean | 'desktop'
 }) {
-  const digits = Number(numeral.value.replace(/[^0-9.]/g, ''))
-  const animated = useCountUp(Number.isFinite(digits) ? digits : 0, active)
-  const text =
-    Number.isFinite(digits) && digits !== 0
-      ? Math.round(animated).toLocaleString('en-US')
-      : numeral.value
+  if (quiet === true) {
+    return (
+      <p className="sr-only">
+        {numeral.value} {numeral.unit}
+      </p>
+    )
+  }
   return (
-    <motion.p className="mt-7 flex items-end gap-3" variants={ITEM}>
-      <span className="spec-num spec-num--stat">{text}</span>
+    <motion.p
+      className={`mt-7 flex items-end gap-3 ${quiet === 'desktop' ? 'md:sr-only' : ''}`}
+      variants={ITEM}
+    >
+      <ScrambleText className="spec-num spec-num--stat spec-num--code" text={numeral.value} />
       <span className="spec-unit pb-[0.6em]">{numeral.unit}</span>
     </motion.p>
   )

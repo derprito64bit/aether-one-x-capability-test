@@ -95,6 +95,15 @@ meet in `showcaseBridge` (`src/film/overlay/callouts.ts`): the director writes t
 presented layer, focus, anchors and bounds every frame; the overlay writes the free
 `slot` the part is fitted into. Read `docs/teardown.md` "Round 05 showcase" first.
 
+Since round 06 every act has a room: `src/film/backdrop/scenes.ts` maps acts to
+scenes and exports `sceneWeights`/`studioWeight`/`darkWeight` (pure functions of
+progress). The 3D studio sweep fades by `studioWeight` over a transparent canvas;
+HTML rooms (`Backdrop.tsx`) paint behind it with each act's giant figure
+(`SCENE_BOARDS` in `chapters.ts`), and `sceneLighting.ts` relights the phone per
+room. A resting scroll between sections is completed (`overlay/tour.ts` rest map,
+`hooks/useScrollSettle.ts`, `components/SectionSettle.tsx`). Palette and rules:
+`docs/design-tokens.md` "Section rooms".
+
 Pacing is controlled by `--film-height` in `src/index.css`, **not** by moving act
 boundaries. Every boundary is a fraction, so changing the runway rescales everything
 without touching the timeline.

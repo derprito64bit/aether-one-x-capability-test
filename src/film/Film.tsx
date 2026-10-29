@@ -7,6 +7,10 @@ import { progressFromUrl, scrollToProgress } from './scroll.ts'
 import { FilmLoader } from './FilmLoader.tsx'
 import { filmLoad } from './loadTracker.ts'
 
+// Section rooms behind the transparent canvas: only needed with the 3D, so
+// they load beside it instead of in the initial bundle.
+const BackdropLazy = lazy(() => import('./backdrop/Backdrop.tsx'))
+
 const FilmCanvasLazy = lazy(() =>
   import('./FilmCanvas.tsx').then((m) => {
     // three + R3F + the film code have landed: the bulk of the loader's bar.
@@ -254,6 +258,9 @@ export function Film() {
         ref={stage}
         className="dark-scope sticky top-0 h-screen w-full overflow-hidden supports-[height:100svh]:h-[100svh]"
       >
+        <Suspense fallback={null}>
+          <BackdropLazy progress={progress} />
+        </Suspense>
         <Suspense
           fallback={
             <div className="flex h-full items-center justify-center" role="status">

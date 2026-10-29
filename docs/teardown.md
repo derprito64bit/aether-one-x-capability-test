@@ -54,6 +54,14 @@ manifest in `showcaseLayers.ts`):
   flex; speaker grille; camera voice-coil cans, barrels, coated elements,
   sensor boards, periscope prism window, ToF emitter and receiver.
 
+**Round 06 (2026-10-28): smoother, slower pop-out.** Arrive d 0-0.30
+(slide out over 0-0.14, flight to the hero pose over 0.10-0.30, overlapped,
+on an arc that bows up the stack axis by a fifth of the flight), hold
+0.30-0.70, leave 0.70-1 (exact mirror). Every ramp is smootherstep, so
+motion starts and ends at zero velocity; focus is 0 at d 0.20, 1 from 0.32
+to 0.68, 0 by 0.80. The shared teardown scalars follow scroll at 5/s (was
+7/s). The e2e card mapping is unchanged.
+
 The camera-layer beat (slide, lens-up turn, module rising to the
 housings) and the tour aim offset are retired: the camera bump stays
 bonded to the rear panel, and the internal camera modules are their own

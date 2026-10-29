@@ -33,7 +33,9 @@ function SceneReady({ onReady }: { onReady: () => void }) {
 
 /**
  * Film WebGL canvas. Own lazy chunk with three. Explicit color pipeline:
- * sRGB-authored colors, ACES Filmic tone mapping, per-act exposure. Renders
+ * sRGB-authored colors, ACES Filmic tone mapping, per-act exposure. The
+ * canvas is transparent (no scene background): the stage's sweep is opaque
+ * in the studio acts and fades out where an HTML room takes over. Renders
  * only while the film can be seen; the configurator below has its own
  * canvas, and two full-rate WebGL loops halve everyone's frame budget.
  */
@@ -49,12 +51,16 @@ export function FilmCanvas({
     <Canvas
       frameloop={active ? 'always' : 'never'}
       dpr={Math.min(window.devicePixelRatio || 1, 1.75)}
-      gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+      // Transparent (round 06): each act's room is an HTML backdrop behind
+      // the canvas; the studio acts paint their own opaque 3D sweep. The
+      // default premultiplied alpha keeps tone-mapped colour correct.
+      gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
       camera={{ fov: 16, near: 0.01, far: 10, position: [0, 0, 0.96] }}
       onCreated={({ gl }) => {
         onStage?.('renderer')
         gl.toneMapping = THREE.ACESFilmicToneMapping
         gl.toneMappingExposure = 1
+        gl.setClearColor(0x000000, 0)
         gl.domElement.addEventListener(
           'webglcontextlost',
           (event) => {
@@ -65,7 +71,6 @@ export function FilmCanvas({
         )
       }}
     >
-      <color attach="background" args={['#e8e5de']} />
       <AdaptiveDpr cap={1.75} />
       {onStage !== undefined ? <SceneReady onReady={() => onStage('scene')} /> : null}
       <FilmScene

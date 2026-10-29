@@ -14,7 +14,7 @@ export interface TeardownScalars {
 }
 
 /** Rate at which the shared teardown scalars follow scroll, per second. */
-const TEARDOWN_FOLLOW = 7
+const TEARDOWN_FOLLOW = 5
 
 /**
  * Damps the teardown's shared scalars (separation and tour cursor) toward
