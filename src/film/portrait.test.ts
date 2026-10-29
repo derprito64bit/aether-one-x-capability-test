@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { portraitWeight } from './portrait.ts'
+import { batteryFitWeight, portraitWeight } from './portrait.ts'
 
 describe('portrait placement weight', () => {
   it('applies wherever the phone poses', () => {
@@ -16,10 +16,19 @@ describe('portrait placement weight', () => {
 
   it('eases across every edge (no steps, pure in progress)', () => {
     let prev = portraitWeight(0)
+    let prevCell = batteryFitWeight(0)
     for (let i = 1; i <= 10000; i++) {
       const w = portraitWeight(i / 10000)
+      const cell = batteryFitWeight(i / 10000)
       expect(Math.abs(w - prev)).toBeLessThan(0.02)
+      expect(Math.abs(cell - prevCell)).toBeLessThan(0.02)
       prev = w
+      prevCell = cell
     }
+  })
+
+  it('fits the battery cell only while the x-ray shows', () => {
+    for (const p of [0.9, 0.91, 0.92]) expect(batteryFitWeight(p), `p=${p}`).toBe(1)
+    for (const p of [0.86, 0.88, 0.94, 0.96]) expect(batteryFitWeight(p), `p=${p}`).toBe(0)
   })
 })

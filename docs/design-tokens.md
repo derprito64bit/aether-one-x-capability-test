@@ -17,7 +17,10 @@ the home page to be a dark room with a spotlight on the phone. `<html
 data-theme="dark">` (set before first paint on `/` by index.html, and by
 HomePage while mounted) swaps the surface and ink tokens for the dark set at
 the end of `src/index.css`; film, buy deck, nav and footer all follow. The
-other pages keep the porcelain theme.
+other pages keep the porcelain theme. Two overrides live there too: the nav
+glass turns smoked (the milky porcelain glass left its links at 1.3:1), and
+the primary button brightens on hover instead of deepening (#9cc3ff, 10.9:1
+with its dark label).
 
 ## Surfaces
 
@@ -61,6 +64,11 @@ Rules:
   on dark ones; the copy veil (`--veil-rgb`) blends with the room.
 - Figures are Geist Mono, decoded in (scramble) as their room takes over,
   sized by length to about 55% of the frame and hung opposite the copy.
+  Phones have no free wall (the phone owns the top half), so there the
+  copy shows the act's numeral instead, and short phones (under 740 px
+  tall) keep it for assistive tech only. The battery x-ray fills the
+  middle, so its figure hangs under the copy at 1280 px and up only
+  (`SceneBoard.wideOnly`).
 - Everything is a pure function of progress: transforms and opacity
   driven by the act's local progress `--t`; blurred layers only translate.
 

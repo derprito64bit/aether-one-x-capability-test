@@ -226,11 +226,13 @@ export function FilmLoader({ tracker }: { tracker: LoadTracker }) {
     }
     window.addEventListener('wheel', block, { passive: false })
     window.addEventListener('touchmove', block, { passive: false })
-    window.addEventListener('keydown', blockKeys)
+    // Capture phase: first in line, so the film's own key handling sees
+    // the key already refused.
+    window.addEventListener('keydown', blockKeys, true)
     return () => {
       window.removeEventListener('wheel', block)
       window.removeEventListener('touchmove', block)
-      window.removeEventListener('keydown', blockKeys)
+      window.removeEventListener('keydown', blockKeys, true)
     }
   }, [phase])
 

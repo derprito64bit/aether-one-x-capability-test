@@ -58,8 +58,8 @@ export const CHAPTERS: Chapter[] = [
     body: `A fictional flagship, shown in one continuous shot: a titanium frame, a circular camera and a ${DISPLAY.size} display that runs to the edge. Scroll, and each part of it steps into the light in turn.`,
     facts: [
       { value: DISPLAY.size.replace(' in', ''), unit: 'in', label: 'LTPO OLED display' },
-      { value: String(DIMENSIONS.thicknessMm), unit: 'mm', label: 'Edge to edge' },
-      { value: String(DIMENSIONS.weightG), unit: 'g', label: FRAME_MATERIAL },
+      { value: String(CAM_MAIN?.mp ?? 50), unit: 'MP', label: 'Main camera' },
+      { value: formatNumber(BATTERY.capacity), unit: 'mAh', label: 'Two-day battery' },
     ],
   },
   {
@@ -600,12 +600,14 @@ export interface SceneFigure {
  */
 export interface SceneBoard {
   figures: SceneFigure[]
+  /** A line under the figures; empty for none. */
   caption: string
   /**
-   * False when the act's subject fills a phone's whole frame (no wall
-   * left for the figure): the copy column then keeps its numeral there.
+   * The act's subject fills the middle of the frame, leaving a wall only
+   * under the copy on wide frames (1280 px and up): the figure shows there,
+   * and narrower frames keep the numeral in the copy instead.
    */
-  onPhones?: boolean
+  wideOnly?: boolean
 }
 
 /** 2^(3 x bits) colours, in billions: 10-bit panels show 1.07 billion. */
@@ -637,9 +639,10 @@ export const SCENE_BOARDS: Partial<Record<ActId, SceneBoard>> = {
     caption: `${TEARDOWN_FACTS.storageType} · ${MEMORY.ramGb} GB ${MEMORY.type}`,
   },
   battery: {
-    onPhones: false,
+    // The charging figures are the copy's facts already; no room below.
     figures: [{ value: formatNumber(BATTERY.capacity), unit: 'mAh' }],
-    caption: `${BATTERY.wired} W wired · 50% in ${BATTERY.charge50Min} min · ${BATTERY.wireless} W wireless`,
+    caption: '',
+    wideOnly: true,
   },
   software: {
     figures: [{ value: '2.0', unit: 'AetherOS' }],

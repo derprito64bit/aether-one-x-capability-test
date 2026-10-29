@@ -26,6 +26,24 @@ Newest first. One entry per session or stage.
 - Found on the live site and fixed: the film loader covered /#buy for
   seconds after a cold load; it now skips deep links and holds the page by
   refusing input instead of toggling overflow (WebKit lost ?t= positions).
+- Independent review (3D code, HTML code, a real-GPU browser pass) found
+  and this round fixed:
+  - the nav stayed milky porcelain glass on the dark home (links 1.3:1);
+  - the primary button's hover fell to 3.5:1;
+  - arrow-key act jumps glided one stop past where they landed;
+  - Page keys and big wheel notches skipped stops. Now one gesture goes
+    to one stop, and page keys step stop to stop.
+  - the open fan stalled 0.2% into the buy deck;
+  - on phones, figures hid behind the phone (the copy carries the numeral
+    there now) and the battery x-ray sat under the copy (the portrait fit
+    now frames the cell);
+  - the battery figure and caption collided with the copy at 1024 and
+    1440 px;
+  - a mobile teardown label covered the copy's eyebrow;
+  - the cover glass was invisible in the overview (its rim now outlines
+    it);
+  - finish names were missing for screen readers;
+  - the arrival facts were mislabelled.
 
 ## 2026-10-28 - Section rooms, code-set type, auto-advance (stopgap)
 

@@ -6,6 +6,7 @@ import { TEARDOWN_COPY } from '../chapters.ts'
 import { cursorAt } from '../teardown/layers.ts'
 import {
   BRIDGE_STALE_MS,
+  DEFAULT_SLOT_PORTRAIT,
   calloutBridge,
   calloutReveal,
   overlayCursor,
@@ -65,7 +66,8 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
     let frame = 0
     const v = new THREE.Vector3()
     const box = { x0: 0, x1: 0, y0: 0, y1: 0 }
-    const rect = { w: 0, h: 0, safeLeft: 0, safeRight: 0 }
+    // copyTop: where the copy card begins on phones (labels stop above it).
+    const rect = { w: 0, h: 0, safeLeft: 0, safeRight: 0, copyTop: Number.POSITIVE_INFINITY }
     const sizes = ITEMS.map(() => ({ w: 0, h: 0 }))
     const overviewSizes = TEARDOWN_COPY.map(() => ({ w: 0, h: 0, num: 0 }))
     const overviewMax = { full: 0, num: 0 }
@@ -150,8 +152,13 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
         slot.x1 = desktop ? (rect.safeRight - 16) / w : 0.95
       }
       slot.y0 = (desktop ? 96 : 76) / h
-      slot.y1 = desktop || chapter === null ? (h - 104) / h : (chapter.offsetTop - 12) / h
+      // Phones: the top half, like every other act's portrait framing. Not
+      // the copy card's top: it was measured on the act showing at the
+      // time (usually the short arrival card), which let tall parts run
+      // under the much taller teardown copy.
+      slot.y1 = desktop ? (h - 104) / h : DEFAULT_SLOT_PORTRAIT.y1
       slot.set = true
+      rect.copyTop = !desktop && chapter !== null ? chapter.offsetTop : Number.POSITIVE_INFINITY
       // Copy is static, so sizes are measured on resize only (never per
       // frame: layout thrash in an overlay loop), after the mode is set.
       labelRefs.current.forEach((label, i) => {
@@ -238,8 +245,16 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
       }
       const reduced = reducedQuery.matches
       const desktop = rect.w >= 768
+      // Phones: the copy card's height changes with each layer's copy, so
+      // its top is re-read a few times a second (one layout read, cheap).
+      if (!desktop && frame % 12 === 0) {
+        const chapter = layerRef.current?.parentElement?.querySelector<HTMLElement>(
+          '[data-testid="film-chapter"]',
+        )
+        rect.copyTop = chapter?.offsetTop ?? Number.POSITIVE_INFINITY
+      }
       const top = 84
-      const bottom = desktop ? rect.h - 112 : rect.h * 0.56
+      const bottom = desktop ? rect.h - 112 : Math.min(rect.h * 0.56, rect.copyTop - 10)
 
       // --- One layer presented: its sub-components, two columns. ---
       const copy = TEARDOWN_COPY[layer]

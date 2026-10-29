@@ -58,18 +58,48 @@ const EPS = 0.0015
 
 /**
  * The next stop beyond p in the direction of travel, or null past the
- * last (forward) or before the first (backward).
+ * last (forward) or before the first (backward). A stop within `eps` of p
+ * counts as reached.
  */
-export function nextStop(p: number, dir: number): number | null {
+export function nextStop(p: number, dir: number, eps = EPS): number | null {
   if (dir >= 0) {
-    for (const s of FILM_STOPS) if (s > p + EPS) return s
+    for (const s of FILM_STOPS) if (s > p + eps) return s
     return null
   }
   for (let i = FILM_STOPS.length - 1; i >= 0; i--) {
     const s = FILM_STOPS[i] as number
-    if (s < p - EPS) return s
+    if (s < p - eps) return s
   }
   return null
+}
+
+/** True when p rests on a stop (within `eps`): nothing left to finish. */
+export function atStop(p: number, eps: number): boolean {
+  return FILM_STOPS.some((s) => Math.abs(s - p) <= eps)
+}
+
+/**
+ * Where a gesture that began at `from` and came to rest at `p` glides to.
+ * One gesture, one stop: if the page already ran past a stop on the way
+ * (a big wheel notch, a fast flick) by no more than `snap`, it returns to
+ * that stop; otherwise it carries on to the next stop ahead. `eps` is a
+ * stop's own catchment (a few pixels, in progress units).
+ */
+export function gestureStop(
+  from: number,
+  p: number,
+  dir: number,
+  snap: number,
+  eps: number,
+): number | null {
+  let crossed: number | null = null
+  for (const s of FILM_STOPS) {
+    const past = dir * (p - s)
+    if (dir * (s - from) > eps && past >= 0 && past <= snap) {
+      if (crossed === null || dir * (s - crossed) > 0) crossed = s
+    }
+  }
+  return crossed ?? nextStop(p, dir, eps)
 }
 
 /**

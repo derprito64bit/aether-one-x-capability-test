@@ -13,8 +13,11 @@ export function BigNumeral({
   quiet = false,
 }: {
   numeral: ChapterNumeral
-  /** true: assistive tech only; 'desktop': shown on phones only. */
-  quiet?: boolean | 'desktop'
+  /**
+   * true: assistive tech only; 'desktop': shown on phones only; 'wide':
+   * shown below 1280 px only.
+   */
+  quiet?: boolean | 'desktop' | 'wide'
 }) {
   if (quiet === true) {
     return (
@@ -25,7 +28,9 @@ export function BigNumeral({
   }
   return (
     <motion.p
-      className={`mt-7 flex items-end gap-3 ${quiet === 'desktop' ? 'md:sr-only' : ''}`}
+      className={`film-numeral mt-5 flex items-end gap-3 md:mt-7 ${
+        quiet === 'desktop' ? 'md:sr-only' : quiet === 'wide' ? 'xl:sr-only' : ''
+      }`}
       variants={ITEM}
     >
       <ScrambleText className="spec-num spec-num--stat spec-num--code" text={numeral.value} />

@@ -36,12 +36,15 @@ import {
   TOUR_END,
   TOUR_START,
   actRestStart,
+  atStop,
+  gestureStop,
   nextStop,
   playRate,
   rawCursor,
   stopDurationMs,
 } from './tour.ts'
 import { useScrollSettle } from '../../hooks/useScrollSettle.ts'
+import { animateScrollTo } from '../../lib/settle.ts'
 import { XrayReadout } from './XrayReadout.tsx'
 
 interface FilmOverlayProps {
@@ -154,13 +157,13 @@ function StatGrid({
 
 /**
  * The copy numeral stands down where the act's room projects the figure:
- * everywhere, or on desktop only when phones get no figure (see
- * SceneBoard.onPhones).
+ * on desktop, or only on wide frames for a wide-only board. Phones have no
+ * wall for it, so there the copy keeps it.
  */
-function numeralQuiet(id: ActId): boolean | 'desktop' {
+function numeralQuiet(id: ActId): boolean | 'desktop' | 'wide' {
   const board = figureFor(id)
   if (board === null) return false
-  return board.onPhones === false ? 'desktop' : true
+  return board.wideOnly === true ? 'wide' : 'desktop'
 }
 
 /** Progress of the runway's current scroll position (mapped like Film). */
@@ -318,17 +321,25 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
   // over at once. Off while the tour plays.
   useScrollSettle(
     progress,
-    (dir, moved) => {
+    (dir, moved, from) => {
       const el = runway.current
       const p = progress.get()
       if (el === null) return null
       const rect = el.getBoundingClientRect()
-      const span = rect.height - window.innerHeight
-      if (span <= 0 || moved * span < window.innerHeight * 0.03) return null
+      const vh = window.innerHeight
+      const span = rect.height - vh
+      if (span <= 0 || moved * span < vh * 0.03) return null
       const top = rect.top + window.scrollY
-      if (p >= 1 && dir > 0) return null
+      if (p >= 1 && dir > 0) {
+        // The film is over and the buy deck only peeks in at the bottom:
+        // bring it in (further up the screen, the page settle owns it).
+        return rect.bottom > vh * 0.85 ? { y: top + rect.height, ms: 1400 } : null
+      }
       if (p <= 0 && dir < 0) return null
-      const to = nextStop(p, dir)
+      // Already resting on a stop (an act jump, the rail): nothing to finish.
+      const px = 1 / span
+      if (atStop(p, 4 * px)) return null
+      const to = gestureStop(from, p, dir, 0.5 * vh * px, 4 * px)
       if (to === null) {
         // Past the last stop going on: the section after the film.
         return dir > 0 ? { y: top + rect.height, ms: 1400 } : null
@@ -337,6 +348,60 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     },
     !playing,
   )
+
+  // Page keys step stop to stop too (Space, Shift+Space, Page Up/Down)
+  // while the film holds the screen: straight to the next stop instead of
+  // a native page jump that overshoots it and has to come back. Presses
+  // during a glide queue on from its target. Reduced motion keeps the
+  // native keys; arrows are left native (a short step the settle finishes).
+  useEffect(() => {
+    if (playing) return
+    let target: number | null = null
+    let cancelGlide: (() => void) | null = null
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
+      const forward = event.key === 'PageDown' || (event.key === ' ' && !event.shiftKey)
+      const back = event.key === 'PageUp' || (event.key === ' ' && event.shiftKey)
+      if (!forward && !back) return
+      const t = event.target
+      if (
+        t instanceof Element &&
+        t.closest(
+          'input, textarea, select, button, summary, [contenteditable="true"], [role="slider"]',
+        )
+      )
+        return
+      const el = runway.current
+      if (el === null || reducedMotion()) return
+      const rect = el.getBoundingClientRect()
+      const vh = window.innerHeight
+      const span = rect.height - vh
+      if (span <= 0 || rect.top > 1 || rect.bottom < vh - 1) return
+      const dir = forward ? 1 : -1
+      const top = rect.top + window.scrollY
+      const p = progress.get()
+      const to = nextStop(target ?? p, dir, 4 / span)
+      if (to === null && dir < 0) return
+      event.preventDefault()
+      cancelGlide?.()
+      target = to
+      const y = to === null ? top + rect.height : top + to * span
+      const ms = to === null ? 1400 : stopDurationMs(p, to)
+      cancelGlide = animateScrollTo(
+        y,
+        () => {
+          target = null
+          cancelGlide = null
+        },
+        ms,
+      )
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      cancelGlide?.()
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [playing, progress, runway])
 
   // Keyboard film navigation: arrows jump between acts with an aria-live
   // announcement of the act name (the chapter container below is the live

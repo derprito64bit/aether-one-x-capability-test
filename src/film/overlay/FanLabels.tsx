@@ -74,28 +74,34 @@ export function FanLabels() {
   }, [])
 
   return (
-    <div
-      className="pointer-events-none absolute inset-0"
-      aria-hidden="true"
-      data-testid="fan-labels"
-    >
-      {FINISHES.map((finish, i) => (
-        <div
-          key={finish.id}
-          ref={(el) => {
-            labelRefs.current[i] = el
-          }}
-          data-testid={`fan-label-${finish.id}`}
-          className="absolute top-0 left-0 flex items-center gap-1.5 rounded-full bg-[rgb(var(--veil-rgb)/0.72)] px-2 py-1 font-mono text-[10px] tracking-[0.12em] whitespace-nowrap text-(--color-ink) uppercase md:text-[11px]"
-          style={{ opacity: 0, visibility: 'hidden' }}
-        >
-          <span
-            className="h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_0_1px_rgb(255_255_255/0.25)]"
-            style={{ background: finish.swatch }}
-          />
-          <span data-scramble-text={finish.name}>{finish.name}</span>
-        </div>
-      ))}
-    </div>
+    <>
+      {/* The projected names are decorative; assistive tech gets the list. */}
+      <p className="sr-only">
+        {`${FINISHES.length} finishes: ${FINISHES.map((f) => f.name).join(', ')}.`}
+      </p>
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden="true"
+        data-testid="fan-labels"
+      >
+        {FINISHES.map((finish, i) => (
+          <div
+            key={finish.id}
+            ref={(el) => {
+              labelRefs.current[i] = el
+            }}
+            data-testid={`fan-label-${finish.id}`}
+            className="absolute top-0 left-0 flex items-center gap-1.5 rounded-full bg-[rgb(var(--veil-rgb)/0.72)] px-2 py-1 font-mono text-[10px] tracking-[0.12em] whitespace-nowrap text-(--color-ink) uppercase md:text-[11px]"
+            style={{ opacity: 0, visibility: 'hidden' }}
+          >
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_0_1px_rgb(255_255_255/0.25)]"
+              style={{ background: finish.swatch }}
+            />
+            <span data-scramble-text={finish.name}>{finish.name}</span>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }

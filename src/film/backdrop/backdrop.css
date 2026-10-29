@@ -66,29 +66,19 @@
   max-width: max(var(--fw, 40vw), 15rem);
 }
 
-/* Phones: the device fills the middle and the copy the bottom, so the
-   figure takes the strip between the nav and the top of the phone, its
-   unit inline, no caption. A room whose subject fills the whole frame (the
-   battery x-ray) shows none; its copy keeps the numeral instead. */
+/* Phones: the device owns the top half of the frame and the copy the
+   bottom, so there is no free wall for a figure (behind the phone it read
+   as fragments). The copy column shows the act's numeral there instead
+   (FilmOverlay numeralQuiet). */
 @media (max-width: 767px) {
   .bd-board {
-    left: 50%;
-    top: 12.5%;
-    transform: translate(-50%, -50%);
+    display: none;
   }
-  .bd-figure {
-    font-size: clamp(2.75rem, min(19vw, calc(80vw / (var(--chars, 4) * 0.53))), 5.25rem);
-  }
-  .bd-figure-line {
-    flex-direction: row;
-  }
-  .bd-unit {
-    order: 0;
-    font-size: 11px;
-    margin: 0.25em 0 0 0.5em;
-  }
-  .bd-caption,
-  .bd-board--desktop {
+}
+/* A room whose subject fills the middle (the battery x-ray) has a wall
+   only under the copy, and only on wide frames (SceneBoard.wideOnly). */
+@media (max-width: 1279px) {
+  .bd-board--wide {
     display: none;
   }
 }

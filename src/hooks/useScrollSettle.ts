@@ -20,16 +20,16 @@ const INPUT_WINDOW_MS = 1500
 
 /**
  * Finishes a scroll for the reader: when `value` (a scroll-driven motion
- * value) comes to rest after a real input gesture, `decide(dir, moved)`
- * may return where to ease to (dir: the gesture's direction; moved: how
- * far it went, in the value's units). Never while a
+ * value) comes to rest after a real input gesture, `decide(dir, moved,
+ * from)` may return where to ease to (dir: the gesture's direction; moved:
+ * how far it went and from: where it began, in the value's units). Never while a
  * finger rests on the glass, never after a scripted jump (deep link, rail,
  * test), never under reduced motion; any new input cancels at once. No
  * scroll listeners: it rides the motion value (film invariant 2).
  */
 export function useScrollSettle(
   value: MotionValue<number>,
-  decide: (dir: number, moved: number) => SettleTarget | null,
+  decide: (dir: number, moved: number, from: number) => SettleTarget | null,
   enabled: boolean,
 ): void {
   const decideRef = useRef(decide)
@@ -56,10 +56,14 @@ export function useScrollSettle(
       settling = false
     }
     const settle = (): void => {
-      if (touching || !fromInput) return
-      const moved = gestureFrom === null ? 0 : Math.abs(last - gestureFrom)
+      if (touching) return
+      const from = gestureFrom ?? last
+      // The gesture is over either way: a later one measures from its own
+      // start, never from a long-gone origin (a fling whose tail outlived
+      // the input window would otherwise inflate the next nudge).
       gestureFrom = null
-      const to = decideRef.current(dir, moved)
+      if (!fromInput) return
+      const to = decideRef.current(dir, Math.abs(last - from), from)
       if (to === null) return
       settling = true
       cancelAnim = animateScrollTo(

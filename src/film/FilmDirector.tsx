@@ -3,7 +3,8 @@ import type { MotionValue } from 'motion/react'
 import { useRef, type MutableRefObject } from 'react'
 import * as THREE from 'three'
 import { centerBias } from './framing.ts'
-import { PORTRAIT_CENTER, PORTRAIT_SPAN, portraitWeight } from './portrait.ts'
+import { PORTRAIT_CENTER, PORTRAIT_SPAN, batteryFitWeight, portraitWeight } from './portrait.ts'
+import { BATTERY_CELL } from './internals/layout.ts'
 import { DIM } from '../components/PhoneViewer/phoneDimensions.ts'
 import { SHOTS, capAngularStep } from './shots.ts'
 import { STAGE_LIGHTING } from './lighting.ts'
@@ -182,6 +183,47 @@ function aimRoomLight(
   light.target.updateMatrixWorld()
 }
 
+/**
+ * Vertical extent (in units of the lens's tan, i.e. NDC at k = 1) of a box
+ * in the hero's local frame, posed by `pose` and seen from `view` (the
+ * camera's inverse world matrix). Writes `out`; `corner` is scratch.
+ */
+function boxSpanY(
+  pose: THREE.Matrix4,
+  view: THREE.Matrix4,
+  tanV: number,
+  box: { cx: number; cy: number; cz: number; hx: number; hy: number; hz: number },
+  corner: THREE.Vector3,
+  out: { y0: number; y1: number },
+): void {
+  out.y0 = Infinity
+  out.y1 = -Infinity
+  for (let k = 0; k < 8; k++) {
+    corner
+      .set(
+        box.cx + (k & 1 ? box.hx : -box.hx),
+        box.cy + (k & 2 ? box.hy : -box.hy),
+        box.cz + (k & 4 ? box.hz : -box.hz),
+      )
+      .applyMatrix4(pose)
+      .applyMatrix4(view)
+    const ny = corner.y / (Math.max(1e-4, -corner.z) * tanV)
+    out.y0 = Math.min(out.y0, ny)
+    out.y1 = Math.max(out.y1, ny)
+  }
+}
+
+/** The whole phone and the battery cell, as boxes for the portrait fit. */
+const PHONE_BOX = { cx: 0, cy: 0, cz: 0, hx: DIM.w / 2, hy: DIM.h / 2, hz: DIM.t / 2 }
+const CELL_BOX = {
+  cx: BATTERY_CELL.cx,
+  cy: BATTERY_CELL.cy,
+  cz: BATTERY_CELL.cz,
+  hx: BATTERY_CELL.w / 2,
+  hy: BATTERY_CELL.h / 2,
+  hz: BATTERY_CELL.thickness / 2,
+}
+
 /** Smoothstep on a clamped input. */
 function smooth01(t: number): number {
   const c = Math.min(1, Math.max(0, t))
@@ -328,6 +370,7 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     goalBoxScale: new THREE.Vector3(),
     goalEuler: new THREE.Euler(),
     goalCorner: new THREE.Vector3(),
+    goalSpan: { y0: 0, y1: 0 },
     viewShift: 0,
     roomDir: new THREE.Vector3(),
     heroWorld: new THREE.Vector3(),
@@ -500,12 +543,17 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     }
     // Portrait placement (round 07): on phones the copy card owns the
     // bottom ~45%, so outside the teardown (its own slot), the camera macro
-    // dive, the battery x-ray, and the fan (its own framing), the phone is
-    // fitted into the top ~55%, centred: the lens widens until the goal
-    // pose's box fits, and a vertical view offset lifts it (projection
-    // only, the camera pose is untouched). Pure in progress and aspect.
+    // dive and the fan (its own framing), the subject is fitted into the
+    // top ~55%, centred: the lens widens until the goal pose's box fits,
+    // and a vertical view offset lifts it (projection only, the camera
+    // pose is untouched). The subject is the whole phone, or during the
+    // battery x-ray the cell alone, so its close-up stays a close-up; the
+    // two weights sum to 1 across the x-ray's edges. Pure in progress and
+    // aspect.
     const portraitW = aspect < 1 ? portraitWeight(p) * (1 - fp.turn) : 0
-    if (portraitW > 0.001) {
+    const cellW = aspect < 1 ? batteryFitWeight(p) : 0
+    s.viewShift = 0
+    if (portraitW > 0.001 || cellW > 0.001) {
       cam.updateMatrixWorld()
       s.heroGoal.compose(
         s.goalBoxPos.set(px, py, 0),
@@ -513,29 +561,26 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
         s.goalBoxScale.setScalar(t.scale),
       )
       const tanV = Math.tan((targetFov * Math.PI) / 360)
-      let y0 = Infinity
-      let y1 = -Infinity
-      for (let k = 0; k < 8; k++) {
-        s.goalCorner
-          .set(
-            k & 1 ? DIM.w / 2 : -DIM.w / 2,
-            k & 2 ? DIM.h / 2 : -DIM.h / 2,
-            k & 4 ? DIM.t / 2 : -DIM.t / 2,
-          )
-          .applyMatrix4(s.heroGoal)
-          .applyMatrix4(cam.matrixWorldInverse)
-        const ny = s.goalCorner.y / (Math.max(1e-4, -s.goalCorner.z) * tanV)
-        y0 = Math.min(y0, ny)
-        y1 = Math.max(y1, ny)
-      }
+      const span = s.goalSpan
       // Region: y 4%-55% of the height = NDC -0.1..0.92.
-      const k = Math.max(1, (y1 - y0) / PORTRAIT_SPAN)
-      const kEff = 1 + (k - 1) * portraitW
+      let kPhone = 1
+      let midPhone = 0
+      if (portraitW > 0.001) {
+        boxSpanY(s.heroGoal, cam.matrixWorldInverse, tanV, PHONE_BOX, s.goalCorner, span)
+        kPhone = Math.max(1, (span.y1 - span.y0) / PORTRAIT_SPAN)
+        midPhone = (span.y0 + span.y1) / 2
+      }
+      let kCell = 1
+      let midCell = 0
+      if (cellW > 0.001) {
+        boxSpanY(s.heroGoal, cam.matrixWorldInverse, tanV, CELL_BOX, s.goalCorner, span)
+        kCell = Math.max(1, (span.y1 - span.y0) / PORTRAIT_SPAN)
+        midCell = (span.y0 + span.y1) / 2
+      }
+      const kEff = 1 + (kPhone - 1) * portraitW + (kCell - 1) * cellW
       targetFov = (2 * Math.atan(tanV * kEff) * 180) / Math.PI
-      const shift = (PORTRAIT_CENTER - (y0 + y1) / 2 / kEff) * portraitW
-      s.viewShift = shift
-    } else {
-      s.viewShift = 0
+      s.viewShift =
+        (PORTRAIT_CENTER - midPhone / kEff) * portraitW + (PORTRAIT_CENTER - midCell / kEff) * cellW
     }
     const shiftPx = (s.viewShift * state.size.height) / 2
     if (Math.abs(shiftPx) > 0.01) {
@@ -638,7 +683,10 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     materials.screen.opacity += (0.2 - materials.screen.opacity) * glassShow
     materials.screen.color.copy(s.glassDark).lerp(s.glassClear, glassShow)
     materials.screen.envMapIntensity = s.glassEnv + (1.4 - s.glassEnv) * glassShow
-    materials.glassRim.opacity = 0.9 * glassShow
+    // In the open-sandwich overview, clear glass all but vanishes against
+    // the dark room: its rim alone outlines it there (continuous into the
+    // presentation, which takes the larger of the two).
+    materials.glassRim.opacity = 0.9 * Math.max(glassShow, 0.6 * show.overview)
     materials.glassGlint.opacity = 0.85 * glassShow
     materials.glassSheen.opacity = 0.75 * glassShow
 

@@ -6,6 +6,8 @@ import {
   TOUR_START,
   TOUR_STEP,
   actRestStart,
+  atStop,
+  gestureStop,
   nextStop,
   playRate,
   rawCursor,
@@ -64,6 +66,30 @@ describe('film stops', () => {
     // Off the ends: the page takes over.
     expect(nextStop(0.999, 1)).toBeNull()
     expect(nextStop(0, -1)).toBeNull()
+  })
+
+  it('stops one gesture at the stop it ran past, a little or not at all', () => {
+    const px = 1 / 27900 // a 1440x900 runway
+    const snap = 450 * px
+    const eps = 4 * px
+    // A page key from the open overview overshoots layer 1 by ~360 px:
+    // back to layer 1, not on to layer 2.
+    const overview = TOUR_START - 0.006
+    expect(gestureStop(overview, overview + 810 * px, 1, snap, eps)).toBeCloseTo(at(0.5), 9)
+    // A big notch back from the film's end runs past the open fan.
+    const fan = FILM_STOPS[FILM_STOPS.length - 1] ?? 0
+    expect(gestureStop(1, 1 - 250 * px, -1, snap, eps)).toBe(fan)
+    // A long fling well past a stop carries on to the next one ahead.
+    expect(gestureStop(at(0.5), at(2.4), 1, snap, eps)).toBeCloseTo(at(2.5), 9)
+    // ...but one that only just ran past a stop returns to it.
+    expect(gestureStop(at(0.5), at(2.2), 1, snap, eps)).toBeCloseTo(at(1.5), 9)
+    // A normal step that crosses nothing: the next stop ahead, even one
+    // only a few pixels away.
+    expect(gestureStop(at(3.5), at(3.5) + 200 * px, 1, snap, eps)).toBeCloseTo(at(4.5), 9)
+    expect(gestureStop(at(3.5), at(4.5) - 20 * px, 1, snap, eps)).toBeCloseTo(at(4.5), 9)
+    // Resting on a stop (an act jump just landed) is detected.
+    expect(atStop(at(4.5) + 1 * px, eps)).toBe(true)
+    expect(atStop(at(4.5) + 40 * px, eps)).toBe(false)
   })
 
   it('plays teardown layers slowly and longer stretches for longer', () => {
