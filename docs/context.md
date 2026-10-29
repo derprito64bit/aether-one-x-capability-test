@@ -5,7 +5,8 @@
 Aether One X v2 — fictional flagship product film site. Build repo:
 `C:\Users\Aaron\aether-one-x-v2` (git `master`). Deploy repo:
 `C:\Users\Aaron\Documents\GitHub\muse-spark-testing` (git `main`,
-GitHub `derprito64bit/muse-spark-testing`, Vercel Hobby auto-deploys).
+GitHub `derprito64bit/aether-one-x-capability-test`, formerly
+`muse-spark-testing`; Vercel Hobby auto-deploys).
 Sync ritual: work in build, copy excluding `.git node_modules dist
 reference test-results playwright-report .playwright-mcp`, commit both,
 push deploy.

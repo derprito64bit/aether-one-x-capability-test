@@ -102,7 +102,7 @@ A first-visit loading screen where the phone is the progress bar.
 
 ## Repo workflow
 
-Work directly in this repo (`derprito64bit/muse-spark-testing`) on a branch per
+Work directly in this repo (`derprito64bit/aether-one-x-capability-test`) on a branch per
 stage, PR, CI green, merge; Vercel deploys `main`. The local build repo
 `C:\Users\Aaron\aether-one-x-v2` is synced after merges (apply the merged diff
 on a branch there, merge to `master`) until the owner retires it. The old
