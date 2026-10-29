@@ -2,10 +2,10 @@ import * as THREE from 'three'
 import { SCENE_IDS, sceneWeights, type SceneId } from './backdrop/scenes.ts'
 
 /**
- * Per-room lighting (round 06, section scenes). The light rooms (the 3D
- * studio sweep, titanium, glass) keep the studio rig exactly as it was.
- * The dark rooms dim the studio rig and light the phone like the room
- * behind it: a projector key from the beam's corner, coloured rims for the
+ * Per-room lighting (round 06, section scenes; every room dark since
+ * round 07). The spot rooms (the 3D studio, titanium, glass) light the
+ * phone from the spotlight above with cool rims. The other dark rooms dim
+ * the studio rig and light the phone like the room behind it: a projector key from the beam's corner, coloured rims for the
  * spectrum, data, charge, and neural rooms. Room lights are directional and
  * camera-relative (their direction is authored in camera space, x right, y
  * up, z toward the viewer), so the projector key always comes from the
@@ -22,6 +22,11 @@ export interface RoomLight {
 export interface SceneLight {
   /** Multiplier on the studio rig (key, fill, rim, accent, ambient). */
   studio: number
+  /**
+   * Overhead spotlight (a real SpotLight above the subject, inverse-square
+   * falloff, soft penumbra), candela-like. Only the spot rooms use it.
+   */
+  spot: number
   /** scene.environmentIntensity: a black room must not reflect a studio. */
   env: number
   /** Exposure multiplier on top of the act's. */
@@ -32,17 +37,33 @@ export interface SceneLight {
 }
 
 const OFF: RoomLight = { color: '#ffffff', intensity: 0, dir: [0, 0, 1] }
-const LIGHT_ROOM: SceneLight = { studio: 1, env: 1, exposure: 1, key: OFF, rimL: OFF, rimR: OFF }
+
+/**
+ * Round 07: the studio is a dark room with a spotlight, and the titanium
+ * and glass rooms are dark too. A strong top key from the spot's
+ * direction, cool rims to lift the silhouette off black, and a trimmed
+ * studio rig so the obsidian faces still read.
+ */
+const SPOT_ROOM: SceneLight = {
+  studio: 0.28,
+  spot: 3,
+  env: 0.3,
+  exposure: 1,
+  key: { color: '#f2f5ff', intensity: 1.5, dir: [0.12, 1, 0.38] },
+  rimL: { color: '#9ec2ff', intensity: 2.8, dir: [-1, 0.2, -0.3] },
+  rimR: { color: '#d4e2ff', intensity: 4, dir: [1, 0.25, -0.25] },
+}
 
 export const SCENE_LIGHT: Readonly<Record<SceneId, SceneLight>> = {
-  studio: LIGHT_ROOM,
-  titanium: LIGHT_ROOM,
-  glass: LIGHT_ROOM,
+  studio: SPOT_ROOM,
+  titanium: SPOT_ROOM,
+  glass: SPOT_ROOM,
   // Camera act: the HTML beam comes from off-frame upper left (about x
   // -0.25w, y -0.2h). Strong cool-white key from there, a crisp rim on
   // the right edge, deep falloff everywhere else.
   projector: {
     studio: 0.14,
+    spot: 0,
     env: 0.34,
     exposure: 1,
     key: { color: '#eef4ff', intensity: 6, dir: [-1.25, 0.95, 0.6] },
@@ -53,6 +74,7 @@ export const SCENE_LIGHT: Readonly<Record<SceneId, SceneLight>> = {
   // neutral key so the screen still reads.
   spectrum: {
     studio: 0.35,
+    spot: 0,
     env: 0.35,
     exposure: 1,
     key: { color: '#ffffff', intensity: 0.9, dir: [0.2, 0.55, 1] },
@@ -61,6 +83,7 @@ export const SCENE_LIGHT: Readonly<Record<SceneId, SceneLight>> = {
   },
   data: {
     studio: 0.3,
+    spot: 0,
     env: 0.35,
     exposure: 1,
     key: { color: '#dfe8ff', intensity: 1.4, dir: [-0.6, 0.8, 0.8] },
@@ -71,6 +94,7 @@ export const SCENE_LIGHT: Readonly<Record<SceneId, SceneLight>> = {
   // so more of the studio rig survives here.
   charge: {
     studio: 0.5,
+    spot: 0,
     env: 0.4,
     exposure: 1,
     key: { color: '#e8fff2', intensity: 1.4, dir: [-0.6, 0.8, 0.8] },
@@ -79,6 +103,7 @@ export const SCENE_LIGHT: Readonly<Record<SceneId, SceneLight>> = {
   },
   os: {
     studio: 0.35,
+    spot: 0,
     env: 0.4,
     exposure: 1,
     key: { color: '#eef3ff', intensity: 1.8, dir: [-0.5, 0.7, 0.9] },
@@ -87,6 +112,7 @@ export const SCENE_LIGHT: Readonly<Record<SceneId, SceneLight>> = {
   },
   neural: {
     studio: 0.3,
+    spot: 0,
     env: 0.35,
     exposure: 1,
     key: { color: '#e6ecff', intensity: 1.4, dir: [-0.6, 0.8, 0.8] },
@@ -104,6 +130,7 @@ export interface BlendedRoomLight {
 
 export interface BlendedSceneLight {
   studio: number
+  spot: number
   env: number
   exposure: number
   key: BlendedRoomLight
@@ -116,7 +143,15 @@ function roomLight(): BlendedRoomLight {
 }
 
 export function createSceneLight(): BlendedSceneLight {
-  return { studio: 1, env: 1, exposure: 1, key: roomLight(), rimL: roomLight(), rimR: roomLight() }
+  return {
+    studio: 1,
+    spot: 0,
+    env: 1,
+    exposure: 1,
+    key: roomLight(),
+    rimL: roomLight(),
+    rimR: roomLight(),
+  }
 }
 
 const WEIGHTS = new Float32Array(SCENE_IDS.length)
@@ -158,12 +193,14 @@ function blendSlot(out: BlendedRoomLight, slot: 'key' | 'rimL' | 'rimR'): void {
 export function blendSceneLight(p: number, out: BlendedSceneLight): BlendedSceneLight {
   sceneWeights(p, WEIGHTS)
   out.studio = 0
+  out.spot = 0
   out.env = 0
   out.exposure = 0
   for (let i = 0; i < SCENE_IDS.length; i++) {
     const w = WEIGHTS[i] ?? 0
     const s = SCENE_LIGHT[SCENE_IDS[i] as SceneId]
     out.studio += w * s.studio
+    out.spot += w * s.spot
     out.env += w * s.env
     out.exposure += w * s.exposure
   }

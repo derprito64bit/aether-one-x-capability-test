@@ -1,207 +1,334 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { MotionValue } from 'motion/react'
 import * as THREE from 'three'
-import { darkWeight, studioWeight } from '../backdrop/scenes.ts'
+import { studioWeight } from '../backdrop/scenes.ts'
 import { sampleFilm } from '../sample.ts'
 import { computeFilmStates } from '../states.ts'
-import { stageColors } from './stageColors.ts'
+
+/** Floor plane height (world). */
+const FLOOR_Y = -0.42
+/** Spot source height above the subject (world metres). */
+const SPOT_RISE = 0.95
+/** Spot cone radius where it meets the floor. */
+const SPOT_FOOT = 0.2
+
+/** Paints a small canvas once and wraps it as a texture. */
+function paintTexture(
+  w: number,
+  h: number,
+  draw: (c: CanvasRenderingContext2D, w: number, h: number) => void,
+  colour = true,
+): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const c = canvas.getContext('2d')
+  if (c !== null) draw(c, w, h)
+  const texture = new THREE.CanvasTexture(canvas)
+  // Alpha maps are data, not colour.
+  texture.colorSpace = colour ? THREE.SRGBColorSpace : THREE.NoColorSpace
+  return texture
+}
+
+/** Radial gradient stops, centre outwards. */
+function radial(stops: ReadonlyArray<[number, string]>) {
+  return (c: CanvasRenderingContext2D, w: number, h: number): void => {
+    const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.min(w, h) / 2)
+    for (const [at, color] of stops) g.addColorStop(at, color)
+    c.fillStyle = g
+    c.fillRect(0, 0, w, h)
+  }
+}
+
+const SPOT_VERTEX = /* glsl */ `
+uniform float uHeight;
+varying vec3 vNormalV;
+varying vec3 vViewV;
+varying vec3 vWorld;
+varying float vH;
+void main() {
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vWorld = world.xyz;
+  vec4 mv = viewMatrix * world;
+  vViewV = normalize(-mv.xyz);
+  vNormalV = normalize(normalMatrix * normal);
+  vH = position.y / uHeight + 0.5;
+  gl_Position = projectionMatrix * mv;
+}
+`
+
+const SPOT_FRAGMENT = /* glsl */ `
+uniform float uOpacity;
+uniform vec3 uColor;
+varying vec3 vNormalV;
+varying vec3 vViewV;
+varying vec3 vWorld;
+varying float vH;
+float hash(vec3 p) {
+  p = fract(p * 0.3183099 + 0.1);
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+void main() {
+  // Volumetric read: brightest where the view passes through the most of
+  // the cone (facing), gone at its silhouette edges.
+  float facing = abs(dot(normalize(vNormalV), normalize(vViewV)));
+  float core = pow(facing, 2.2);
+  // Fade in below the source, out into the floor pool.
+  float along = smoothstep(0.0, 0.22, vH) * (1.0 - smoothstep(0.82, 1.0, vH));
+  float lift = mix(0.55, 1.0, vH);
+  // Static dust: a fine, low-contrast grain fixed in world space (no
+  // clock), sub-millimetre so it reads as haze, never as a pattern.
+  float dust = 0.93 + 0.14 * hash(floor(vWorld * 1600.0));
+  float a = uOpacity * core * along * lift * dust;
+  gl_FragColor = vec4(uColor * a, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}
+`
 
 /**
- * The stage (Prompt D section 7, colour journey in section 8): the device
- * gets a place to be instead of floating in a void. An
- * orientation-independent room (gradient backdrop sphere with a horizon
- * value break, so it survives the film's full orbit), a matte floor, and a
- * soft contact pool. The backdrop repaints from the per-act stage colours
- * every frame from a 64x256 scratch canvas: cheap, continuous, and exactly
- * reversible on scrub.
+ * The stage, round 07: a dark studio with a spotlight (the owner's "dark
+ * room with a spotlight on the phone"). It owns the background only in the
+ * studio acts (arrival, teardown, final) and fades by studioWeight where
+ * an HTML room takes over.
  *
- * The contact pool is a baked radial-gradient plane, not a depth pass
- * (round 03 Part E): no drei, no per-frame render target. Its scale tracks
- * the device footprint (wider laid flat) and its opacity tracks height
- * above the floor, so grounding stays plausible through every act.
+ * - Room: a near-black gradient shell (#07080b at the edges, #12141a at
+ *   eye level), BackSide so the orbit never leaves it, plus a soft lifted
+ *   glow billboard behind the subject. No horizon.
+ * - Spotlight: a soft volumetric cone from above (additive, facing-ratio
+ *   faded at its edges, a static dust speckle), aimed at the subject
+ *   wherever it moves, and a bright elliptical light pool on the floor
+ *   under it with the dark contact shadow inside it.
+ * - Floor: unlit, near-black, radially faded into the dark.
  *
- * Cost notes: one tiny canvas upload per frame, one floor draw, one
- * transparent quad. No real-time reflection yet (measured
- * separately per D 13.6).
+ * Every material is transparent from birth (no recompiles), every texture
+ * is painted once at mount and disposed at unmount, and the frame loop
+ * only writes transforms and opacities (zero allocation). `target` is the
+ * subject's world position, written by the director each frame.
  */
-export function Stage({ progress }: { progress: MotionValue<number> }) {
-  const texture = useMemo(() => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 64
-    canvas.height = 256
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.mapping = THREE.EquirectangularReflectionMapping
-    texture.colorSpace = THREE.SRGBColorSpace
-    return texture
-  }, [])
-  const ctx = useMemo(() => {
-    const canvas = texture.image as HTMLCanvasElement
-    return canvas.getContext('2d')
-  }, [texture])
-  const paint = useRef({ base: -1, top: -1 })
-  const pool = useRef<THREE.Mesh>(null)
-  const poolMat = useRef<THREE.MeshBasicMaterial>(null)
-  const floorMat = useRef<THREE.MeshBasicMaterial>(null)
-  const sweep = useRef<THREE.Mesh>(null)
-  const sweepMat = useRef<THREE.MeshBasicMaterial>(null)
-  const floor = useRef<THREE.Mesh>(null)
-  // Floor tones derive from the act colour (scratch objects: zero allocation
-  // per frame). The sweep and the floor share them so no seam can show.
-  const tones = useMemo(
+export function Stage({
+  progress,
+  target,
+}: {
+  progress: MotionValue<number>
+  target: MutableRefObject<THREE.Vector3>
+}) {
+  const textures = useMemo(
     () => ({
-      floor: new THREE.Color(),
-      deep: new THREE.Color(),
-      warmGrey: new THREE.Color('#c2bbad'),
-      shadow: new THREE.Color('#a59e90'),
+      room: paintTexture(16, 256, (c, w, h) => {
+        // Canvas row 0 is the sphere's crown (flipY).
+        const g = c.createLinearGradient(0, 0, 0, h)
+        g.addColorStop(0, '#07080b')
+        g.addColorStop(0.36, '#0c0d12')
+        g.addColorStop(0.5, '#12141a')
+        g.addColorStop(0.62, '#0c0d11')
+        g.addColorStop(1, '#07080b')
+        c.fillStyle = g
+        c.fillRect(0, 0, w, h)
+      }),
+      glow: paintTexture(
+        128,
+        128,
+        radial([
+          [0, 'rgba(34,38,48,0.85)'],
+          [0.45, 'rgba(26,29,37,0.45)'],
+          [1, 'rgba(18,20,26,0)'],
+        ]),
+      ),
+      floorAlpha: paintTexture(
+        128,
+        128,
+        radial([
+          [0, '#ffffff'],
+          [0.4, '#ffffff'],
+          [1, '#000000'],
+        ]),
+        false,
+      ),
+      pool: paintTexture(
+        128,
+        128,
+        radial([
+          [0, 'rgba(255,255,255,1)'],
+          [0.35, 'rgba(255,255,255,0.55)'],
+          [0.7, 'rgba(255,255,255,0.14)'],
+          [1, 'rgba(255,255,255,0)'],
+        ]),
+      ),
+      shadow: paintTexture(
+        128,
+        128,
+        radial([
+          [0, 'rgba(0,0,0,0.85)'],
+          [0.55, 'rgba(0,0,0,0.38)'],
+          [1, 'rgba(0,0,0,0)'],
+        ]),
+      ),
     }),
     [],
   )
+  useEffect(() => () => Object.values(textures).forEach((t) => t.dispose()), [textures])
 
-  // Radial alpha for the floor disc: opaque under the device, gone at the
-  // rim, so the disc edge dissolves into the sweep instead of drawing a bowl.
-  const floorAlpha = useMemo(() => {
-    const size = 256
-    const canvas = document.createElement('canvas')
-    canvas.width = size
-    canvas.height = size
-    const c = canvas.getContext('2d')
-    if (c !== null) {
-      const g = c.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-      g.addColorStop(0, '#ffffff')
-      g.addColorStop(0.45, '#ffffff')
-      g.addColorStop(1, '#000000')
-      c.fillStyle = g
-      c.fillRect(0, 0, size, size)
-    }
-    return new THREE.CanvasTexture(canvas)
-  }, [])
-  useEffect(() => () => floorAlpha.dispose(), [floorAlpha])
+  const spotMaterial = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uOpacity: { value: 0 },
+          uColor: { value: new THREE.Color('#dfe7ff') },
+          uHeight: { value: 1 },
+        },
+        vertexShader: SPOT_VERTEX,
+        fragmentShader: SPOT_FRAGMENT,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    [],
+  )
+  useEffect(() => () => spotMaterial.dispose(), [spotMaterial])
+  // Unit cone, apex up: scaled per frame to reach from the source to the floor.
+  const spotGeometry = useMemo(() => new THREE.CylinderGeometry(0.06, 1, 1, 64, 1, true), [])
+  useEffect(() => () => spotGeometry.dispose(), [spotGeometry])
 
-  const poolTexture = useMemo(() => {
-    const size = 128
-    const canvas = document.createElement('canvas')
-    canvas.width = size
-    canvas.height = size
-    const c = canvas.getContext('2d')
-    if (c !== null) {
-      const g = c.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-      g.addColorStop(0, 'rgba(0,0,0,0.85)')
-      g.addColorStop(0.55, 'rgba(0,0,0,0.38)')
-      g.addColorStop(1, 'rgba(0,0,0,0)')
-      c.fillStyle = g
-      c.fillRect(0, 0, size, size)
-    }
-    const texture = new THREE.CanvasTexture(canvas)
-    texture.colorSpace = THREE.SRGBColorSpace
-    return texture
-  }, [])
+  const refs = useRef({
+    sweep: null as THREE.Mesh | null,
+    sweepMat: null as THREE.MeshBasicMaterial | null,
+    glow: null as THREE.Mesh | null,
+    glowMat: null as THREE.MeshBasicMaterial | null,
+    floor: null as THREE.Mesh | null,
+    floorMat: null as THREE.MeshBasicMaterial | null,
+    spot: null as THREE.Mesh | null,
+    pool: null as THREE.Mesh | null,
+    poolMat: null as THREE.MeshBasicMaterial | null,
+    shadow: null as THREE.Mesh | null,
+    shadowMat: null as THREE.MeshBasicMaterial | null,
+    toCam: new THREE.Vector3(),
+  })
 
-  useEffect(() => () => texture.dispose(), [texture])
-  useEffect(() => () => poolTexture.dispose(), [poolTexture])
-
-  useFrame(() => {
+  useFrame((state) => {
+    const r = refs.current
     const p = progress.get()
-    // Section scenes (round 06): the sweep and floor own the background
-    // only in the studio acts and fade out where an HTML room takes over;
-    // the contact pool stays on the light rooms (it grounds the phone on
-    // titanium and glass too) and goes in the dark ones. Transparent from
-    // birth: opacity changes never recompile; fully faded meshes skip the
-    // draw.
     const studio = studioWeight(p)
-    const sm = sweepMat.current
-    if (sm !== null) sm.opacity = studio
-    if (sweep.current !== null) sweep.current.visible = studio > 0.001
-    const fm0 = floorMat.current
-    if (fm0 !== null) fm0.opacity = studio
-    if (floor.current !== null) floor.current.visible = studio > 0.001
-    const ground = 1 - darkWeight(p)
-    // Contact pool follows the device every frame: wider laid flat, fainter
-    // aloft. It must run before the colour early-return below, or it
-    // freezes while the stage colour rests and depends on scroll history.
-    const mesh = pool.current
-    const mat = poolMat.current
-    if (mesh !== null && mat !== null) {
-      const s = sampleFilm(p)
-      const st = computeFilmStates(p)
-      const heightAboveFloor = s.py + 0.42
+    const on = studio > 0.001
+    const t = target.current
+    if (r.sweepMat !== null) r.sweepMat.opacity = studio
+    if (r.sweep !== null) r.sweep.visible = on
+    if (r.floorMat !== null) r.floorMat.opacity = studio
+    if (r.floor !== null) r.floor.visible = on
+    // Lifted glow behind the subject, facing the camera.
+    if (r.glow !== null && r.glowMat !== null) {
+      r.glow.visible = on
+      r.glowMat.opacity = studio
+      r.toCam.copy(state.camera.position).sub(t).normalize()
+      r.glow.position.copy(t).addScaledVector(r.toCam, -0.55)
+      r.glow.quaternion.copy(state.camera.quaternion)
+    }
+    // Spotlight cone: from SPOT_RISE above the subject down to the floor.
+    if (r.spot !== null) {
+      const top = t.y + SPOT_RISE
+      const height = Math.max(0.2, top - FLOOR_Y)
+      r.spot.visible = on
+      r.spot.position.set(t.x, (top + FLOOR_Y) / 2, t.z)
+      r.spot.scale.set(SPOT_FOOT, height, SPOT_FOOT)
+      spotMaterial.uniforms.uOpacity!.value = 0.17 * studio
+    }
+    // Floor light pool and, inside it, the contact shadow.
+    const s = sampleFilm(p)
+    const st = computeFilmStates(p)
+    if (r.pool !== null && r.poolMat !== null) {
+      r.pool.visible = on
+      r.pool.position.set(t.x, FLOOR_Y + 0.0004, t.z)
+      r.poolMat.opacity = 0.5 * studio
+    }
+    if (r.shadow !== null && r.shadowMat !== null) {
+      const heightAboveFloor = t.y - FLOOR_Y
       const closeness = Math.min(1, Math.max(0, 1 - heightAboveFloor / 0.9))
       const span = 1.4 * s.scale * (1 + 0.35 * st.layDown)
-      mesh.position.set(s.px, -0.415, 0)
-      mesh.scale.set(span, span, 1)
-      mat.opacity = 0.55 * closeness * ground
-      mesh.visible = closeness * ground > 0.01
+      r.shadow.position.set(t.x, FLOOR_Y + 0.0008, t.z)
+      r.shadow.scale.set(span, span, 1)
+      r.shadowMat.opacity = 0.6 * closeness * studio
+      r.shadow.visible = closeness * studio > 0.01
     }
-    if (ctx === null) return
-    const { base, top } = stageColors(p)
-    // Numeric compare: no strings built on frames where nothing changed.
-    const baseHex = base.getHex()
-    const topHex = top.getHex()
-    const last = paint.current
-    if (last.base === baseHex && last.top === topHex) return
-    last.base = baseHex
-    last.top = topHex
-    const baseCss = `#${base.getHexString()}`
-    const topCss = `#${top.getHexString()}`
-    // Seamless studio sweep (site overhaul): crown -> act colour -> floor
-    // tone, no hard horizon. The old value break at the equator plus a
-    // brown underside read as a bowl rim behind the device. Depth now
-    // comes from the floor falling a few steps darker into the distance.
-    tones.floor.copy(base).lerp(tones.warmGrey, 0.32)
-    tones.deep.copy(base).lerp(tones.shadow, 0.55)
-    const floorCss = `#${tones.floor.getHexString()}`
-    // Canvas row 0 is v=1 (flipY), the sphere's crown.
-    const g = ctx.createLinearGradient(0, 0, 0, 256)
-    g.addColorStop(0, topCss)
-    g.addColorStop(0.38, baseCss)
-    g.addColorStop(0.53, floorCss)
-    g.addColorStop(1, `#${tones.deep.getHexString()}`)
-    ctx.fillStyle = g
-    const fm = floorMat.current
-    if (fm !== null) fm.color.copy(tones.floor)
-    ctx.fillRect(0, 0, 64, 256)
-    texture.needsUpdate = true
   })
+
+  const bind =
+    <K extends keyof typeof refs.current>(key: K) =>
+    (value: (typeof refs.current)[K]) => {
+      refs.current[key] = value
+    }
 
   return (
     <group name="stage">
-      {/* Room: gradient shell, BackSide so the orbit never leaves it. */}
-      <mesh ref={sweep} scale={[6, 6, 6]} renderOrder={-3}>
+      {/* Room: near-black gradient shell, BackSide so the orbit never leaves it. */}
+      <mesh ref={bind('sweep')} scale={[6, 6, 6]} renderOrder={-5}>
         <sphereGeometry args={[1, 48, 32]} />
         <meshBasicMaterial
-          ref={sweepMat}
-          map={texture}
+          ref={bind('sweepMat')}
+          map={textures.room}
           side={THREE.BackSide}
           depthWrite={false}
           transparent
         />
       </mesh>
-      {/* Floor: unlit sweep tone with a radial fade, a backdrop, not a
-          subject. Unlit on purpose: a lit disc never matches the unlit
-          room, and the mismatch is the seam. Grounding is the contact pool. */}
-      <mesh ref={floor} position={[0, -0.42, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-2}>
-        <circleGeometry args={[3, 64]} />
-        <meshBasicMaterial
-          ref={floorMat}
-          alphaMap={floorAlpha}
-          transparent
-          depthWrite={false}
-          color="#d4cec2"
-        />
-      </mesh>
-      {/* Contact pool: broad occlusion, the device's weight made visible. */}
-      {/* Transparent pass order: floor, then pool, then the (transparent-
-          from-birth) device, so neither ground layer can sort over it. */}
-      <mesh ref={pool} position={[0, -0.415, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-1}>
+      {/* Lifted glow behind the subject: the dark room's soft centre. */}
+      <mesh ref={bind('glow')} scale={[1.6, 1.6, 1]} renderOrder={-4}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
-          ref={poolMat}
-          map={poolTexture}
-          transparent
+          ref={bind('glowMat')}
+          map={textures.glow}
           depthWrite={false}
-          opacity={0.55}
+          transparent
         />
       </mesh>
+      {/* Floor: unlit near-black, radially faded into the dark. */}
+      <mesh
+        ref={bind('floor')}
+        position={[0, FLOOR_Y, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        renderOrder={-3}
+      >
+        <circleGeometry args={[3, 64]} />
+        <meshBasicMaterial
+          ref={bind('floorMat')}
+          alphaMap={textures.floorAlpha}
+          transparent
+          depthWrite={false}
+          color="#0a0b0e"
+        />
+      </mesh>
+      {/* Spot light pool on the floor (additive), elliptical. */}
+      <mesh
+        ref={bind('pool')}
+        rotation={[-Math.PI / 2, 0, 0]}
+        scale={[0.62, 0.46, 1]}
+        renderOrder={-2}
+      >
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          ref={bind('poolMat')}
+          map={textures.pool}
+          color="#e6ecff"
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          opacity={0}
+        />
+      </mesh>
+      {/* Contact shadow inside the pool: the device's weight made visible. */}
+      <mesh ref={bind('shadow')} rotation={[-Math.PI / 2, 0, 0]} renderOrder={-1}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          ref={bind('shadowMat')}
+          map={textures.shadow}
+          transparent
+          depthWrite={false}
+          opacity={0}
+        />
+      </mesh>
+      {/* Volumetric spotlight cone (drawn with the transparent pass). */}
+      <mesh ref={bind('spot')} geometry={spotGeometry} material={spotMaterial} renderOrder={1} />
     </group>
   )
 }

@@ -6,6 +6,7 @@ import { TEARDOWN_COPY } from '../chapters.ts'
 import { cursorAt } from '../teardown/layers.ts'
 import {
   BRIDGE_STALE_MS,
+  DEFAULT_SLOT_PORTRAIT,
   calloutBridge,
   calloutReveal,
   overlayCursor,
@@ -65,7 +66,8 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
     let frame = 0
     const v = new THREE.Vector3()
     const box = { x0: 0, x1: 0, y0: 0, y1: 0 }
-    const rect = { w: 0, h: 0, safeLeft: 0, safeRight: 0 }
+    // copyTop: where the copy card begins on phones (labels stop above it).
+    const rect = { w: 0, h: 0, safeLeft: 0, safeRight: 0, copyTop: Number.POSITIVE_INFINITY }
     const sizes = ITEMS.map(() => ({ w: 0, h: 0 }))
     const overviewSizes = TEARDOWN_COPY.map(() => ({ w: 0, h: 0, num: 0 }))
     const overviewMax = { full: 0, num: 0 }
@@ -150,8 +152,13 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
         slot.x1 = desktop ? (rect.safeRight - 16) / w : 0.95
       }
       slot.y0 = (desktop ? 96 : 76) / h
-      slot.y1 = desktop || chapter === null ? (h - 104) / h : (chapter.offsetTop - 12) / h
+      // Phones: the top half, like every other act's portrait framing. Not
+      // the copy card's top: it was measured on the act showing at the
+      // time (usually the short arrival card), which let tall parts run
+      // under the much taller teardown copy.
+      slot.y1 = desktop ? (h - 104) / h : DEFAULT_SLOT_PORTRAIT.y1
       slot.set = true
+      rect.copyTop = !desktop && chapter !== null ? chapter.offsetTop : Number.POSITIVE_INFINITY
       // Copy is static, so sizes are measured on resize only (never per
       // frame: layout thrash in an overlay loop), after the mode is set.
       labelRefs.current.forEach((label, i) => {
@@ -238,8 +245,16 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
       }
       const reduced = reducedQuery.matches
       const desktop = rect.w >= 768
+      // Phones: the copy card's height changes with each layer's copy, so
+      // its top is re-read a few times a second (one layout read, cheap).
+      if (!desktop && frame % 12 === 0) {
+        const chapter = layerRef.current?.parentElement?.querySelector<HTMLElement>(
+          '[data-testid="film-chapter"]',
+        )
+        rect.copyTop = chapter?.offsetTop ?? Number.POSITIVE_INFINITY
+      }
       const top = 84
-      const bottom = desktop ? rect.h - 112 : rect.h * 0.56
+      const bottom = desktop ? rect.h - 112 : Math.min(rect.h * 0.56, rect.copyTop - 10)
 
       // --- One layer presented: its sub-components, two columns. ---
       const copy = TEARDOWN_COPY[layer]
@@ -509,11 +524,11 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
             labelRefs.current[i] = el
           }}
           data-testid={`showcase-callout-${item.key}`}
-          className="group absolute top-0 left-0 w-max max-w-(--label-w) rounded-md bg-[rgb(242_240_235/0.8)] px-1.5 py-0.5 group-data-[labels=over]/callouts:max-w-[10rem] group-data-[labels=over]/callouts:rounded-lg group-data-[labels=over]/callouts:bg-(--color-raise)/92 group-data-[labels=over]/callouts:px-2 group-data-[labels=over]/callouts:py-1 group-data-[labels=over]/callouts:shadow-[0_0_0_1px_var(--color-border-hairline),0_6px_16px_-8px_rgba(40,30,10,0.35)]"
+          className="group absolute top-0 left-0 w-max max-w-(--label-w) rounded-md bg-[rgb(var(--veil-rgb)/0.72)] px-1.5 py-0.5 group-data-[labels=over]/callouts:max-w-[10rem] group-data-[labels=over]/callouts:rounded-lg group-data-[labels=over]/callouts:bg-(--color-raise)/92 group-data-[labels=over]/callouts:px-2 group-data-[labels=over]/callouts:py-1 group-data-[labels=over]/callouts:shadow-[0_0_0_1px_var(--color-border-hairline),0_6px_16px_-8px_rgba(40,30,10,0.35)]"
           style={{
             opacity: 0,
             visibility: 'hidden',
-            textShadow: '0 0 6px rgb(242 240 235), 0 0 16px rgb(242 240 235)',
+            textShadow: '0 0 6px rgb(var(--veil-rgb)), 0 0 16px rgb(var(--veil-rgb))',
           }}
         >
           <p className="font-mono text-[11.5px] leading-[18px] font-medium tracking-[0.08em] text-(--color-ink) uppercase group-data-[side=left]:text-right group-data-[labels=over]/callouts:text-[10.5px]">
@@ -535,7 +550,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
           }}
           data-testid={`showcase-layer-${copy.key}`}
           className="absolute top-0 left-0 flex w-max items-baseline gap-2 font-mono text-[10px] leading-[14px] tracking-[0.08em] uppercase md:text-[11px]"
-          style={{ opacity: 0, visibility: 'hidden', textShadow: '0 0 12px rgb(242 240 235)' }}
+          style={{ opacity: 0, visibility: 'hidden', textShadow: '0 0 12px rgb(var(--veil-rgb))' }}
         >
           <span className="text-(--color-faint) group-data-[overview=num]/film:font-medium group-data-[overview=num]/film:text-(--color-ink)">
             {String(i + 1).padStart(2, '0')}

@@ -36,7 +36,13 @@ describe('chapter spec consistency', () => {
   it('uses data values for every figure it renders', () => {
     const text = [
       ...CHAPTERS.map((c) =>
-        [c.kicker, c.headline, c.body, c.numeral?.value ?? '', ...(c.spec ?? [])].join(' | '),
+        [
+          c.kicker,
+          c.headline,
+          c.body,
+          c.numeral?.value ?? '',
+          ...(c.facts ?? []).flatMap((x) => [x.value, x.unit, x.label]),
+        ].join(' | '),
       ),
       teardownText(),
     ].join('\n')
@@ -61,6 +67,17 @@ describe('chapter spec consistency', () => {
   })
 })
 
+describe('act copy', () => {
+  it('gives every act a real description and three facts', () => {
+    for (const c of CHAPTERS) {
+      if (c.act === 'teardown') continue
+      expect(c.body.split(/(?<=[.!?])\s+/).length, c.act).toBeGreaterThanOrEqual(2)
+      expect(c.body.length, c.act).toBeGreaterThan(120)
+      expect(c.facts, c.act).toHaveLength(3)
+    }
+  })
+})
+
 describe('teardown showcase copy', () => {
   it('introduces every layer in physical stack order', () => {
     expect(TEARDOWN_COPY.map((t) => t.key)).toEqual(TEARDOWN_LAYERS.map((l) => l.id))
@@ -76,7 +93,9 @@ describe('teardown showcase copy', () => {
       expect(t.intro.length, t.key).toBeGreaterThan(140)
       expect(t.stats, t.key).toHaveLength(4)
       expect(t.callouts.length, t.key).toBeGreaterThanOrEqual(3)
-      expect(t.callouts.length, t.key).toBeLessThanOrEqual(SHOWCASE_PART_SLOTS)
+      // Four at most: the stagger lands all of them before the auto-scroll
+      // stops mid-hold (callouts.test).
+      expect(t.callouts.length, t.key).toBeLessThanOrEqual(Math.min(4, SHOWCASE_PART_SLOTS))
       for (const s of t.stats) expect(s.value.trim(), t.key).not.toBe('')
     }
     expect(TEARDOWN_INTRO_STATS).toHaveLength(3)

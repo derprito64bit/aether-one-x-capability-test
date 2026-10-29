@@ -9,7 +9,10 @@ import { WORD, WORDS } from './motion.ts'
 export function Headline({ text }: { text: string }) {
   const words = text.split(' ')
   return (
-    <motion.h2 className="display-lg mt-4 text-[clamp(2.25rem,3.9vw,3.75rem)]" variants={WORDS}>
+    <motion.h2
+      className="display-lg mt-3 text-[1.75rem] md:mt-4 md:text-[clamp(2.25rem,3.9vw,3.75rem)]"
+      variants={WORDS}
+    >
       <span className="sr-only">{text}</span>
       <span aria-hidden="true">
         {words.map((word, i) => (

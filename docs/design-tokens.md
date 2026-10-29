@@ -9,7 +9,18 @@ the token they mirror).
 Porcelain studio (site overhaul, 2026-10-28). The owner asked for a cream
 room with more light; the overhaul keeps that brief and lowers the chroma,
 so the obsidian device and the one cobalt accent carry the colour instead
-of a yellow page. One theme for the whole site (light), one accent.
+of a yellow page. One accent.
+
+**Home page: dark room (2026-10-28).** Once every film section had its own
+dark room, the porcelain studio became the outlier, and the owner asked for
+the home page to be a dark room with a spotlight on the phone. `<html
+data-theme="dark">` (set before first paint on `/` by index.html, and by
+HomePage while mounted) swaps the surface and ink tokens for the dark set at
+the end of `src/index.css`; film, buy deck, nav and footer all follow. The
+other pages keep the porcelain theme. Two overrides live there too: the nav
+glass turns smoked (the milky porcelain glass left its links at 1.3:1), and
+the primary button brightens on hover instead of deepening (#9cc3ff, 10.9:1
+with its dark label).
 
 ## Surfaces
 
@@ -33,17 +44,17 @@ light again for the purchase:
 
 | Act      | Room      | Base                   | Accent            | Back-wall figure     |
 | -------- | --------- | ---------------------- | ----------------- | -------------------- |
-| arrival  | studio    | 3D porcelain sweep     | cobalt            | none                 |
-| settle   | titanium  | `#f0f1f3` to `#d0d4da` | brushed sheen     | Ti-6Al-4V (milled)   |
-| approach | glass     | `#f7fafd` to `#d4dde8` | light streaks     | 1.45 mm (outline)    |
-| teardown | studio    | 3D porcelain sweep     | per-layer accents | none                 |
+| arrival  | studio    | 3D dark room + spot    | cobalt            | none                 |
+| settle   | titanium  | `#1b1d22` to `#0b0c0f` | brushed sheen     | Ti-6Al-4V (milled)   |
+| approach | glass     | `#0f1826` to `#05080d` | cool streaks      | 1.45 mm (outline)    |
+| teardown | studio    | 3D dark room + spot    | per-layer accents | none                 |
 | camera   | projector | `#060709`              | cool white beam   | 50 MP (projected)    |
 | display  | spectrum  | `#040507`              | full hue band     | 144 Hz, 1.07B, 2,800 |
 | storage  | data      | `#070b17` navy         | `#708eff` hex     | 1 TB                 |
 | battery  | charge    | `#050706` graphite     | `#3ee08f` level   | 4,000 mAh            |
 | software | os        | `#0b0d13` slate        | soft cool white   | 2.0 AetherOS         |
 | ai       | neural    | `#04060c`              | `#4d7dff` dots    | 46 TOPS              |
-| final    | studio    | 3D porcelain sweep     | cobalt            | none                 |
+| final    | studio    | 3D dark room + spot    | finish fan        | finish names         |
 
 Rules:
 
@@ -53,6 +64,11 @@ Rules:
   on dark ones; the copy veil (`--veil-rgb`) blends with the room.
 - Figures are Geist Mono, decoded in (scramble) as their room takes over,
   sized by length to about 55% of the frame and hung opposite the copy.
+  Phones have no free wall (the phone owns the top half), so there the
+  copy shows the act's numeral instead, and short phones (under 740 px
+  tall) keep it for assistive tech only. The battery x-ray fills the
+  middle, so its figure hangs under the copy at 1280 px and up only
+  (`SceneBoard.wideOnly`).
 - Everything is a pure function of progress: transforms and opacity
   driven by the act's local progress `--t`; blurred layers only translate.
 

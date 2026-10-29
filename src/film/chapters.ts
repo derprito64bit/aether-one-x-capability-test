@@ -19,38 +19,70 @@ export interface ChapterNumeral {
   unit: string
 }
 
+/** One headline capability: a figure, its unit, and what it buys you. */
+export interface TeardownStat {
+  value: string
+  unit: string
+  label: string
+}
+
 export interface Chapter {
   act: ActId
   kicker: string
   headline: string
+  /** Two sentences: what this part of the phone is, then what it does for you. */
   body: string
   numeral?: ChapterNumeral
-  spec?: string[]
+  /** Three key facts under the copy, figures from src/data. */
+  facts?: TeardownStat[]
 }
 
+const CAM_MAIN = CAMERA_LENSES[0]
+const CAM_ULTRA = CAMERA_LENSES[1]
+const CAM_TELE = CAMERA_LENSES[3]
+const CAM_FRONT = CAMERA_LENSES[4]
+const npuMetric = (label: string): number =>
+  PERFORMANCE.npu.metrics.find((m) => m.label === label)?.value ?? 0
+const price = (n: number): string => `$${formatNumber(n)}`
+
 /**
- * Editorial captions per act. Copy lives here as data, never inline in JSX.
+ * Editorial copy per act. Copy lives here as data, never inline in JSX.
  * Every figure is imported from src/data so the film and the specifications
- * page can never disagree.
+ * page can never disagree (chapters.test.ts checks it).
  */
 export const CHAPTERS: Chapter[] = [
   {
     act: 'arrival',
     kicker: 'Aether One X',
     headline: 'Power, without the noise.',
-    body: 'A fictional flagship, presented in one continuous shot.',
+    body: `A fictional flagship, shown in one continuous shot: a titanium frame, a circular camera and a ${DISPLAY.size} display that runs to the edge. Scroll, and each part of it steps into the light in turn.`,
+    facts: [
+      { value: DISPLAY.size.replace(' in', ''), unit: 'in', label: 'LTPO OLED display' },
+      { value: String(CAM_MAIN?.mp ?? 50), unit: 'MP', label: 'Main camera' },
+      { value: formatNumber(BATTERY.capacity), unit: 'mAh', label: 'Two-day battery' },
+    ],
   },
   {
     act: 'settle',
     kicker: 'Grade-5 titanium',
     headline: 'Quiet from every angle.',
-    body: 'Machined rails, ceramic back, symmetrical 1.45 mm bezels.',
+    body: `The frame is machined from one billet of ${FRAME_MATERIAL} and brushed by hand, so every phone carries its own grain. It weighs ${DIMENSIONS.weightG} g, measures ${DIMENSIONS.thicknessMm} mm, and keeps its ${DIMENSIONS.bezelsMm} mm bezels even all the way round.`,
+    facts: [
+      { value: 'Ti-6Al-4V', unit: '', label: 'Grade-5 alloy' },
+      { value: String(DIMENSIONS.weightG), unit: 'g', label: 'Weight' },
+      { value: String(DIMENSIONS.thicknessMm), unit: 'mm', label: 'Thickness' },
+    ],
   },
   {
     act: 'approach',
     kicker: 'Front glass',
     headline: 'Edge to edge.',
-    body: 'The display runs to the frame on all four sides.',
+    body: `Ion-strengthened Aether glass meets the titanium rail with a soft 2.5D edge, and the picture runs right up to it: ${DIMENSIONS.bezelsMm} mm of bezel on every side. An anti-reflective layer cuts glare to ${TEARDOWN_FACTS.reflectancePct}%, so it stays readable in direct sun.`,
+    facts: [
+      { value: String(DIMENSIONS.bezelsMm), unit: 'mm', label: 'Symmetrical bezels' },
+      { value: String(TEARDOWN_FACTS.reflectancePct), unit: '%', label: 'Reflectance' },
+      { value: 'IP68', unit: '', label: 'Water and dust' },
+    ],
   },
   {
     act: 'teardown',
@@ -62,61 +94,105 @@ export const CHAPTERS: Chapter[] = [
     act: 'camera',
     kicker: 'Quad camera',
     headline: 'Five focal lengths.',
-    body: CAMERA_LENSES[0]?.detail ?? '',
-    numeral: { value: String(CAMERA_LENSES[0]?.mp ?? 50), unit: 'MP main' },
-    spec: [`${CAMERA_LENSES[1]?.mp ?? 48} MP ultra-wide`, `${CAMERA_LENSES[3]?.detail ?? ''}`],
+    body: `A ${CAM_MAIN?.mp ?? 50} MP main camera on a ${CAM_MAIN?.sensor ?? '1/1.3 in'} sensor, a ${CAM_ULTRA?.mp ?? 48} MP ultra-wide, a 50 mm portrait lens and a folded 135 mm periscope cover everything from 14 to 135 mm. Optical stabilisation on three of them and a depth sensor keep every frame sharp, and video runs to 8K.`,
+    numeral: { value: String(CAM_MAIN?.mp ?? 50), unit: 'MP main' },
+    facts: [
+      {
+        value: String(CAM_MAIN?.mp ?? 50),
+        unit: 'MP',
+        label: `Main, ${CAM_MAIN?.aperture ?? 'f/1.6'}`,
+      },
+      { value: CAM_TELE?.zoom ?? '5x', unit: '', label: 'Optical periscope' },
+      { value: String(CAM_FRONT?.mp ?? 32), unit: 'MP', label: 'Front, 4K60' },
+    ],
   },
   {
     act: 'display',
     kicker: 'LTPO OLED',
     headline: 'Light, controlled.',
-    body: `${DISPLAY.size} panel, 1 to ${DISPLAY.refreshMax} Hz adaptive.`,
+    body: `A ${DISPLAY.size} panel at ${DISPLAY.resolution} that refreshes anywhere from ${DISPLAY.refreshMin} to ${DISPLAY.refreshMax} Hz, slowing to one frame a second when nothing moves. It reaches ${formatNumber(DISPLAY.peakNits)} nits in sun, shows 1.07 billion colours in ${DISPLAY.colorBits}-bit, and dims at ${formatNumber(DISPLAY.pwm)} Hz so it stays easy on the eyes.`,
     numeral: { value: formatNumber(DISPLAY.peakNits), unit: 'nits peak' },
-    spec: [`${DISPLAY.resolution}`, `${DISPLAY.pwm} Hz dimming`],
+    facts: [
+      { value: formatNumber(DISPLAY.peakNits), unit: 'nits', label: 'Peak brightness' },
+      {
+        value: `${DISPLAY.refreshMin} to ${DISPLAY.refreshMax}`,
+        unit: 'Hz',
+        label: 'Adaptive refresh',
+      },
+      { value: formatNumber(DISPLAY.pwm), unit: 'Hz', label: 'PWM dimming' },
+    ],
   },
   {
     act: 'storage',
     kicker: 'Storage',
     headline: 'Room for everything.',
-    body: `UFS 4.1 with ${MEMORY.ramGb} GB ${MEMORY.type} alongside.`,
+    body: `Up to ${STORAGE_OPTIONS[STORAGE_OPTIONS.length - 1]?.label ?? '1 TB'} of ${TEARDOWN_FACTS.storageType} sits beside ${MEMORY.ramGb} GB of ${MEMORY.type}: room for years of photos, offline maps and every model the phone runs itself. Three capacities, priced simply.`,
     numeral: { value: String((STORAGE_OPTIONS[2]?.gb ?? 1024) / 1024), unit: 'TB max' },
-    spec: STORAGE_OPTIONS.map((s) => `${s.label} · $${s.price}`),
+    facts: STORAGE_OPTIONS.map((s) => ({
+      value: s.label.replace(/\s.*$/, ''),
+      unit: s.label.replace(/^\S+\s/, ''),
+      label: price(s.price),
+    })),
   },
   {
     act: 'battery',
     kicker: 'Silicon-carbon',
     headline: 'Two days. Then minutes.',
-    body: `${BATTERY.charge50Min} minutes on ${BATTERY.wired} W refills half the cell.`,
+    body: `A ${formatNumber(BATTERY.capacity)} mAh silicon-carbon cell carries you through two days, and ${BATTERY.charge50Min} minutes on ${BATTERY.wired} W refills half of it. Lay it on a pad for ${BATTERY.wireless} W wireless, or share ${BATTERY.reverse} W with your earbuds.`,
     numeral: { value: formatNumber(BATTERY.capacity), unit: 'mAh' },
-    spec: [`${BATTERY.wireless} W wireless`, `${BATTERY.reverse} W reverse`],
+    facts: [
+      {
+        value: String(BATTERY.wired),
+        unit: 'W',
+        label: `Wired, 50% in ${BATTERY.charge50Min} min`,
+      },
+      { value: String(BATTERY.wireless), unit: 'W', label: 'Wireless' },
+      { value: String(BATTERY.reverse), unit: 'W', label: 'Reverse wireless' },
+    ],
   },
   {
     act: 'software',
     kicker: 'AetherOS 2.0',
     headline: 'Software that steps aside.',
-    body: 'On-device summaries, offline transcription, private photo cleanup.',
+    body: `Summaries, transcription and photo cleanup run on the phone itself, so they work offline and what you say or shoot never leaves it. The interface stays out of the way until you need it.`,
+    facts: [
+      {
+        value: String(npuMetric('Offline transcription')),
+        unit: 'wpm',
+        label: 'Offline transcription',
+      },
+      { value: String(npuMetric('Photo cleanup')), unit: 's', label: 'Photo cleanup' },
+      { value: 'Offline', unit: '', label: 'Summaries' },
+    ],
   },
   {
     act: 'ai',
     kicker: 'On-device AI',
     headline: 'Intelligence, kept inside.',
-    body: `The neural engine delivers ${PERFORMANCE.npu.hero.value} ${PERFORMANCE.npu.hero.suffix}. Nothing leaves the phone.`,
+    body: `The ${CHIPSET.name}'s neural engine delivers ${PERFORMANCE.npu.hero.value} ${PERFORMANCE.npu.hero.suffix}, enough to run a full assistant with no connection at all. Documents, photos and voice are processed where they live, and nothing leaves the phone.`,
     numeral: { value: String(PERFORMANCE.npu.hero.value), unit: PERFORMANCE.npu.hero.suffix },
+    facts: [
+      {
+        value: String(PERFORMANCE.npu.hero.value),
+        unit: PERFORMANCE.npu.hero.suffix,
+        label: 'Neural engine',
+      },
+      { value: String(npuMetric('On-device inference')), unit: 'ms', label: 'Inference' },
+      { value: 'Private', unit: '', label: 'Documents and voice' },
+    ],
   },
   {
     act: 'final',
     kicker: 'Aether One X',
     headline: 'Choose your finish.',
-    body: 'Six finishes, three capacities. Configure below.',
+    body: `${FINISHES.length} finishes, from near-black ${FINISHES[0]?.name ?? 'Obsidian'} to ${FINISHES[FINISHES.length - 1]?.name ?? 'Clear'}, which shows the parts you have just seen. Pick one, then a capacity, below.`,
+    facts: [
+      { value: String(FINISHES.length), unit: '', label: 'Finishes' },
+      { value: String(STORAGE_OPTIONS.length), unit: '', label: 'Capacities' },
+      { value: price(STORAGE_OPTIONS[0]?.price ?? 999), unit: '', label: 'From' },
+    ],
   },
 ]
-
-/** One headline capability: a figure, its unit, and what it buys you. */
-export interface TeardownStat {
-  value: string
-  unit: string
-  label: string
-}
 
 /** One labelled sub-component; `key` matches a 3D anchor in showcaseBridge. */
 export interface TeardownCallout {
@@ -524,12 +600,14 @@ export interface SceneFigure {
  */
 export interface SceneBoard {
   figures: SceneFigure[]
+  /** A line under the figures; empty for none. */
   caption: string
   /**
-   * False when the act's subject fills a phone's whole frame (no wall
-   * left for the figure): the copy column then keeps its numeral there.
+   * The act's subject fills the middle of the frame, leaving a wall only
+   * under the copy on wide frames (1280 px and up): the figure shows there,
+   * and narrower frames keep the numeral in the copy instead.
    */
-  onPhones?: boolean
+  wideOnly?: boolean
 }
 
 /** 2^(3 x bits) colours, in billions: 10-bit panels show 1.07 billion. */
@@ -561,9 +639,10 @@ export const SCENE_BOARDS: Partial<Record<ActId, SceneBoard>> = {
     caption: `${TEARDOWN_FACTS.storageType} · ${MEMORY.ramGb} GB ${MEMORY.type}`,
   },
   battery: {
-    onPhones: false,
+    // The charging figures are the copy's facts already; no room below.
     figures: [{ value: formatNumber(BATTERY.capacity), unit: 'mAh' }],
-    caption: `${BATTERY.wired} W wired · 50% in ${BATTERY.charge50Min} min · ${BATTERY.wireless} W wireless`,
+    caption: '',
+    wideOnly: true,
   },
   software: {
     figures: [{ value: '2.0', unit: 'AetherOS' }],

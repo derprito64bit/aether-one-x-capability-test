@@ -120,7 +120,7 @@ const control: { current: InternalsControl } = {
   },
 }
 
-const td: TeardownScalars = { sep: 0, tour: -3, cursor: 0, ready: false }
+const td: TeardownScalars = { sep: 0, tour: -3, cursor: 0, ready: false, free: false }
 const show = createShowcaseState()
 const rig = createRigCamera()
 const poses = createLayerPoses()

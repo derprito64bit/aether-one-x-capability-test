@@ -10,10 +10,11 @@ const PAGE = [
 ]
 
 describe('page settle', () => {
-  it('brings the next section in once it has climbed into the top 60%', () => {
+  it('brings the next section in once it shows in the upper 85%', () => {
     expect(pageSettleTarget(PAGE, 28000 - VH * 0.45, VH, 1)).toBe(28000)
-    // Barely peeking (bottom 40%): leave the reader alone.
-    expect(pageSettleTarget(PAGE, 28000 - VH * 0.8, VH, 1)).toBeNull()
+    expect(pageSettleTarget(PAGE, 28000 - VH * 0.8, VH, 1)).toBe(28000)
+    // Barely peeking at the very bottom: leave the reader alone.
+    expect(pageSettleTarget(PAGE, 28000 - VH * 0.92, VH, 1)).toBeNull()
   })
 
   it('takes the reader back when they scroll up into the previous section', () => {

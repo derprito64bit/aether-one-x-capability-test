@@ -59,26 +59,26 @@ function subjectRect(
 }
 
 describe('showcase timing', () => {
-  it('ramps focus 0 at d 0.20, 1 from 0.32 to 0.68, 0 by 0.80', () => {
-    expect(layerFocus(0.2)).toBe(0)
-    expect(layerFocus(0.32)).toBe(1)
+  it('ramps focus 0 at d 0.26, 1 from 0.40 to 0.60, 0 by 0.74', () => {
+    expect(layerFocus(0.26)).toBe(0)
+    expect(layerFocus(0.4)).toBe(1)
     expect(layerFocus(0.5)).toBe(1)
-    expect(layerFocus(0.68)).toBe(1)
-    expect(layerFocus(0.8)).toBe(0)
-    expect(layerFocus(0.26)).toBeGreaterThan(0)
-    expect(layerFocus(0.26)).toBeLessThan(1)
+    expect(layerFocus(0.6)).toBe(1)
+    expect(layerFocus(0.74)).toBe(0)
+    expect(layerFocus(0.33)).toBeGreaterThan(0)
+    expect(layerFocus(0.33)).toBeLessThan(1)
   })
 
-  it('slides out over d 0-0.14, flies 0.10-0.30, holds to 0.70, mirrors back by 1', () => {
+  it('slides out over d 0-0.16, flies 0.12-0.38, holds to 0.62, mirrors back by 1', () => {
     expect(layerSlide(0)).toBe(0)
-    expect(layerSlide(0.07)).toBeCloseTo(0.5, 9)
-    expect(layerSlide(0.14)).toBe(1)
-    expect(layerFly(0.1)).toBe(0)
-    expect(layerFly(0.2)).toBeCloseTo(0.5, 9)
-    expect(layerFly(0.3)).toBe(1)
-    expect(layerFly(0.7)).toBe(1)
-    expect(layerSlide(0.86)).toBeCloseTo(1, 9)
-    expect(layerFly(0.9)).toBeCloseTo(0, 9)
+    expect(layerSlide(0.08)).toBeCloseTo(0.5, 9)
+    expect(layerSlide(0.16)).toBe(1)
+    expect(layerFly(0.12)).toBe(0)
+    expect(layerFly(0.25)).toBeCloseTo(0.5, 9)
+    expect(layerFly(0.38)).toBe(1)
+    expect(layerFly(0.62)).toBe(1)
+    expect(layerSlide(0.84)).toBeCloseTo(1, 9)
+    expect(layerFly(0.88)).toBeCloseTo(0, 9)
     expect(layerSlide(1)).toBe(0)
     for (let d = 0; d <= 1; d += 0.01) {
       expect(layerSlide(d), `mirror d=${d.toFixed(2)}`).toBeCloseTo(layerSlide(1 - d), 12)
@@ -90,9 +90,9 @@ describe('showcase timing', () => {
     const h = 1e-5
     const slope = (f: (d: number) => number, d: number): number => (f(d + h) - f(d - h)) / (2 * h)
     for (const [f, ends] of [
-      [layerSlide, [0, 0.14]],
-      [layerFly, [0.1, 0.3]],
-      [layerFocus, [0.2, 0.32]],
+      [layerSlide, [0, 0.16]],
+      [layerFly, [0.12, 0.38]],
+      [layerFocus, [0.26, 0.4]],
     ] as const) {
       for (const d of ends)
         expect(Math.abs(slope(f, d + 2 * h)), `${f.name} at ${d}`).toBeLessThan(1e-3)
@@ -103,11 +103,11 @@ describe('showcase timing', () => {
   it('keeps the e2e card mapping: layer i holds at p = 0.30 + 0.02 i', () => {
     const s = createShowcaseState()
     for (let i = 0; i < 10; i++) {
-      // Cards read at d = 0.25: the part is in flight, its copy fading in.
+      // Cards read at d = 0.25 (the overlay's cards follow the layer, not
+      // focus): the part is mid-flight there.
       computeShowcaseState(s, tourCursorAt(0.3 + 0.02 * i), 1)
       expect(s.layer).toBe(i)
-      expect(s.focus).toBeGreaterThan(0)
-      expect(s.fly).toBeGreaterThan(0.8)
+      expect(s.fly).toBeCloseTo(0.5, 6)
       computeShowcaseState(s, tourCursorAt(0.305 + 0.02 * i), 1)
       expect(s.focus).toBe(1)
       expect(s.fly).toBe(1)
@@ -133,7 +133,8 @@ describe('showcase timing', () => {
       if (s.tour > 0.999) expect(lit, `u=${u.toFixed(2)}`).toBeLessThanOrEqual(1)
       if (s.focus > 0) {
         expect(s.alpha[s.layer]).toBe(1)
-        for (let i = 0; i < 10; i++) if (i !== s.layer) expect(s.alpha[i]).toBeLessThan(0.2)
+        for (let i = 0; i < 10; i++)
+          if (i !== s.layer) expect(s.alpha[i]).toBeLessThan(SHOWCASE_DIM + 0.01)
       }
     }
   })

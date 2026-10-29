@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { FINISHES, type FinishId } from '../../data/product.ts'
 
 /**
  * Teardown showcase callouts. Labels live in HTML, anchored to world
@@ -22,6 +23,23 @@ export const BRIDGE_STALE_MS = 1500
  * The director's damped teardown cursor (the one the layers move on) and
  * when it last wrote it (ms). Mutated in place, never replaced.
  */
+/**
+ * Finish fan bridge (round 07, final act): written every frame by the film
+ * director, read by the overlay to label each finish. `open` is how far the
+ * fan has spread (0..1); each anchor is a world point just above that
+ * card's top edge, in FINISHES order. `stamp` is performance.now() of the
+ * last write (stale means the film is not running).
+ */
+export const fanBridge: {
+  open: number
+  anchors: Array<{ id: FinishId; x: number; y: number; z: number; on: boolean }>
+  stamp: number
+} = {
+  open: 0,
+  anchors: FINISHES.map((f) => ({ id: f.id, x: 0, y: 0, z: 0, on: false })),
+  stamp: 0,
+}
+
 export const cursorBridge: { cursor: number; stamp: number } = {
   cursor: 0,
   stamp: Number.NEGATIVE_INFINITY,
@@ -150,8 +168,10 @@ export function resolveColumn(labels: ColumnLabel[], min: number, max: number, g
  * Callout stagger: the k-th label of a held layer arrives a beat after
  * the one before it, then all leave with the part. `d` is the layer
  * cursor fraction (0..1), `focus` the bridge's presentation strength.
+ * Every label is fully in by d 0.485, before the auto-scroll's stop at the
+ * hold's centre (d 0.5): a reader carried to a part sees all of its text.
  */
 export function calloutReveal(d: number, k: number, focus: number): number {
-  const start = 0.32 + 0.06 * k
-  return focus * Math.min(1, Math.max(0, (d - start) / 0.07))
+  const start = 0.36 + 0.025 * k
+  return focus * Math.min(1, Math.max(0, (d - start) / 0.05))
 }

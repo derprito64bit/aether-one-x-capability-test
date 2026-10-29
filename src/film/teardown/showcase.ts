@@ -19,12 +19,14 @@ import {
  * transform, and the viewport aspect. Zero allocation: module scratch.
  *
  * Tour cursor u = (p - 0.295) / 0.02, unclamped: u < 0 is the overview,
- * layer i owns u in [i, i + 1), and d = u - i runs its beat (round 06,
- * slower and smoother than the round 05 pop-out):
- *   arrive 0 -> 0.30: slide out of the footprint over 0 -> 0.14, then the
- *     flight (overlapped, 0.10 -> 0.30) on a gentle arc to the hero pose;
- *   hold 0.30 -> 0.70;
- *   leave 0.70 -> 1: the exact mirror.
+ * layer i owns u in [i, i + 1), and d = u - i runs its beat (round 07:
+ * showcased, never rushing):
+ *   arrive 0 -> 0.38: slide out of the footprint over 0 -> 0.16, then the
+ *     flight and turn (overlapped, 0.12 -> 0.38) on a gentle arc;
+ *   hold 0.38 -> 0.62;
+ *   leave 0.62 -> 1: the exact mirror.
+ * Focus: 0 at 0.26, 1 from 0.40 to 0.60, 0 by 0.74. The damped cursor is
+ * also speed-capped (transform.ts), so no part can fly in under ~0.5 s.
  * Every ramp is smootherstep (6t^5 - 15t^4 + 10t^3): zero velocity and
  * zero acceleration at both ends, so nothing pops in or out.
  */
@@ -40,7 +42,7 @@ export const SHOWCASE_TIMING = {
 } as const
 
 /** Opacity factor every other layer dims to while one is presented. */
-export const SHOWCASE_DIM = 0.15
+export const SHOWCASE_DIM = 0.22
 
 const smooth = smoothstep
 
@@ -52,11 +54,11 @@ export function smoother(t: number): number {
 
 /** Beat phase windows (fractions of one layer's beat). */
 export const BEAT = {
-  slideEnd: 0.14,
-  flyStart: 0.1,
-  flyEnd: 0.3,
-  focusIn: 0.2,
-  focusFull: 0.32,
+  slideEnd: 0.16,
+  flyStart: 0.12,
+  flyEnd: 0.38,
+  focusIn: 0.26,
+  focusFull: 0.4,
 } as const
 
 /** Unclamped tour cursor at progress p (clamped to a sane band). */
@@ -73,17 +75,17 @@ function beatEdge(d: number): number {
   return Math.min(d, 1 - d)
 }
 
-/** Slide out of the footprint: 0 home, 1 clear, over the first 14%. */
+/** Slide out of the footprint: 0 home, 1 clear, over the first 16%. */
 export function layerSlide(d: number): number {
   return smoother(beatEdge(d) / BEAT.slideEnd)
 }
 
-/** Flight to the hero pose (and the turn), 10% -> 30% of the beat. */
+/** Flight to the hero pose (and the turn), 12% -> 38% of the beat. */
 export function layerFly(d: number): number {
   return smoother((beatEdge(d) - BEAT.flyStart) / (BEAT.flyEnd - BEAT.flyStart))
 }
 
-/** Presentation focus: 0 at d = 0.20, 1 from 0.32 to 0.68, 0 by 0.80. */
+/** Presentation focus: 0 at d = 0.26, 1 from 0.40 to 0.60, 0 by 0.74. */
 export function layerFocus(d: number): number {
   const range = BEAT.focusFull - BEAT.focusIn
   return Math.min(
@@ -94,7 +96,7 @@ export function layerFocus(d: number): number {
 
 /** The presented layer's own brightness over its beat (others stay dim). */
 export function layerLit(d: number): number {
-  return smoother(beatEdge(d) / 0.12)
+  return smoother(beatEdge(d) / 0.14)
 }
 
 /** Overview hold: after the sandwich opens, before layer 0 arrives. */
@@ -114,9 +116,9 @@ export function tourWeight(u: number): number {
  * whole leave/arrive seam (d 0.7 -> 1.3).
  */
 export function cameraLevel(u: number): number {
-  const a = u - 0.7
+  const a = u - (1 - BEAT.flyEnd)
   const k = Math.floor(a)
-  const level = k + smoother((a - k) / 0.6)
+  const level = k + smoother((a - k) / (2 * BEAT.flyEnd))
   return Math.min(9, Math.max(0, level))
 }
 
@@ -555,7 +557,7 @@ export function slideClearance(def: ShowcaseLayerDef, dir: THREE.Vector3): numbe
 
 const Q_ID = new THREE.Quaternion()
 /** Flight arc bow: the midpoint rises this share of the flight distance. */
-const ARC_LIFT = 0.2
+const ARC_LIFT = 0.12
 const C_SLIDE = new THREE.Vector3()
 const C_PRESENT = new THREE.Vector3()
 
@@ -594,7 +596,7 @@ export function composeLayerPose(
     .add(present.pos)
   out.quat.slerpQuaternions(Q_ID, present.quat, fly)
   // A gentle arc, not a straight snap: a quadratic path whose midpoint
-  // rises along the stack axis by a fifth of the flight. The bow is pure
+  // rises along the stack axis by an eighth of the flight. The bow is pure
   // z (hero-local), so in plan the path stays the straight line between
   // two points outside the footprint, and never re-enters the stack.
   const lift = ARC_LIFT * C_SLIDE.distanceTo(C_PRESENT)

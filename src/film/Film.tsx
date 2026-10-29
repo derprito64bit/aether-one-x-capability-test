@@ -221,6 +221,21 @@ export function Film() {
                 <p className="kicker">{chapter.kicker}</p>
                 <h2 className="display-lg mt-3">{chapter.headline}</h2>
                 <p className="lede mt-4">{chapter.body}</p>
+                {chapter.facts !== undefined && (
+                  <dl className="mt-6 grid grid-cols-3 gap-x-6 gap-y-4 border-t border-(--color-border-hairline) pt-5">
+                    {chapter.facts.map((fact) => (
+                      <div key={fact.label} className="flex flex-col">
+                        <dt className="mt-1 text-sm text-(--color-dim)">{fact.label}</dt>
+                        <dd className="order-first font-mono text-xl font-medium tabular-nums">
+                          {fact.value}
+                          {fact.unit !== '' && (
+                            <span className="ml-1 text-sm text-(--color-dim)">{fact.unit}</span>
+                          )}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
               </div>
               <div className="flex justify-center">
                 <PhoneFrame

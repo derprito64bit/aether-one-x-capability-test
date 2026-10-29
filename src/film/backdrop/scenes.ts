@@ -47,6 +47,9 @@ const SCENE_INDEX = Object.fromEntries(SCENE_IDS.map((id, i) => [id, i])) as Rec
 
 /** Rooms whose base is near-black: copy turns light, the phone is rim-lit. */
 export const DARK_SCENES: ReadonlySet<SceneId> = new Set([
+  'studio',
+  'titanium',
+  'glass',
   'projector',
   'spectrum',
   'data',

@@ -104,6 +104,12 @@ room. A resting scroll between sections is completed (`overlay/tour.ts` rest map
 `hooks/useScrollSettle.ts`, `components/SectionSettle.tsx`). Palette and rules:
 `docs/design-tokens.md` "Section rooms".
 
+Since round 07 the home page is a dark room (`<html data-theme="dark">`, tokens at
+the end of `src/index.css`; other pages stay porcelain), the 3D studio is a dark room
+with a spotlight, and the film moves stop to stop: `FILM_STOPS` in
+`overlay/tour.ts` lists every composed moment a scroll gesture glides to. The final
+act fans the six finishes (`src/film/fan/`), labelled from `fanBridge`.
+
 Pacing is controlled by `--film-height` in `src/index.css`, **not** by moving act
 boundaries. Every boundary is a fraction, so changing the runway rescales everything
 without touching the timeline.

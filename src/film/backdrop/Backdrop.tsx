@@ -13,7 +13,8 @@ import './backdrop.css'
  * act's rest zone at 1440x900 (x/y = centre, w = zone width, all % of the
  * frame). The figure is sized to fill its zone, so it is never hidden
  * behind the phone or run under the copy. The battery's x-ray fills the
- * middle of the frame, so its figure sits under the copy instead.
+ * middle of the frame (the right wall too, at its close-up stop), so its
+ * figure sits under the copy, on wide frames only (SceneBoard.wideOnly).
  */
 /**
  * `fadeOut` (act-local t): the figure gives way where the phone pans
@@ -27,7 +28,7 @@ const FIGURE_AT: Partial<
   camera: { x: 25, y: 45, w: 40 },
   display: { x: 77, y: 45, w: 27 },
   storage: { x: 54, y: 47, w: 16 },
-  battery: { x: 17.5, y: 80, w: 25 },
+  battery: { x: 17.5, y: 83, w: 24 },
   software: { x: 73, y: 46, w: 28 },
   ai: { x: 17, y: 46, w: 24 },
 }
@@ -158,7 +159,7 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
       >
         {children}
         {board !== undefined && act !== undefined && (
-          <div className={board.onPhones === false ? 'bd-board bd-board--desktop' : 'bd-board'}>
+          <div className={board.wideOnly === true ? 'bd-board bd-board--wide' : 'bd-board'}>
             {board.figures.map((f, k) => (
               <div
                 key={f.value}
@@ -173,7 +174,7 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
                 <Figure value={f.value} unit={f.unit} />
               </div>
             ))}
-            <p className="bd-caption">{board.caption}</p>
+            {board.caption !== '' && <p className="bd-caption">{board.caption}</p>}
           </div>
         )}
       </div>
@@ -187,6 +188,7 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
         <>
           <div className="bd-brush" />
           <div className="bd-sheen" />
+          <div className="bd-spot" />
           <div className="bd-horizon" />
         </>,
       )}
@@ -195,6 +197,7 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
         <>
           <div className="bd-streak bd-streak--a" />
           <div className="bd-streak bd-streak--b" />
+          <div className="bd-spot" />
           <div className="bd-horizon" />
         </>,
       )}

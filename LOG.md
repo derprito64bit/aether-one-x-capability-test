@@ -2,6 +2,49 @@
 
 Newest first. One entry per session or stage.
 
+## 2026-10-28 - Dark home, stop-to-stop film, fuller copy, finish fan (stopgap)
+
+- Owner on round 6: pop-out still rushes out; the cream studio is now the
+  outlier, so the home page becomes a dark room with a spotlight on the
+  phone; auto-scroll must carry the reader all the way (and land with all
+  of a section's text in view); fuller text per section; "Choose your
+  finish" shows every finish's back, fanned like a paper fan.
+- Dark home: `data-theme="dark"` on `<html>` (inline script before paint,
+  HomePage while mounted) swaps the surface/ink tokens; film, buy deck,
+  nav and footer follow. The 3D studio is a dark room with a volumetric
+  spot, a floor pool and a real SpotLight; titanium and glass rooms went
+  dark too. Other pages keep porcelain.
+- Stop to stop: a deliberate gesture glides to the next composed moment
+  (act landings, the camera's macro dive, each display figure, the
+  teardown overview and every layer, the open fan), 1.8 s per teardown
+  layer; callout labels are all in before the stop. The pop-out's arrive
+  span grew to 0.38 and the stack has a 0.75 layer/s cap on local moves.
+- Fuller copy: two-sentence bodies and three decoded facts per act, all
+  data-sourced (tested). Finish fan: six rear-facing finishes fanned in
+  the final act, labelled from `fanBridge`. Portrait framing keeps the
+  phone in the top half so the copy has room.
+- Found on the live site and fixed: the film loader covered /#buy for
+  seconds after a cold load; it now skips deep links and holds the page by
+  refusing input instead of toggling overflow (WebKit lost ?t= positions).
+- Independent review (3D code, HTML code, a real-GPU browser pass) found
+  and this round fixed:
+  - the nav stayed milky porcelain glass on the dark home (links 1.3:1);
+  - the primary button's hover fell to 3.5:1;
+  - arrow-key act jumps glided one stop past where they landed;
+  - Page keys and big wheel notches skipped stops. Now one gesture goes
+    to one stop, and page keys step stop to stop.
+  - the open fan stalled 0.2% into the buy deck;
+  - on phones, figures hid behind the phone (the copy carries the numeral
+    there now) and the battery x-ray sat under the copy (the portrait fit
+    now frames the cell);
+  - the battery figure and caption collided with the copy at 1024 and
+    1440 px;
+  - a mobile teardown label covered the copy's eyebrow;
+  - the cover glass was invisible in the overview (its rim now outlines
+    it);
+  - finish names were missing for screen readers;
+  - the arrival facts were mislabelled.
+
 ## 2026-10-28 - Section rooms, code-set type, auto-advance (stopgap)
 
 - Owner on the showcase: "much much better". Next asks: auto-scroll into
