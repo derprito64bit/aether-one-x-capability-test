@@ -1,5 +1,6 @@
 import { useMotionValue, useScroll, type MotionValue } from 'motion/react'
-import { Suspense, lazy, useEffect, useRef, useState, type RefObject } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { releaseBootLoader } from './bootLoader.ts'
 import { PhoneFrame } from '../components/Phone/PhoneFrame.tsx'
 import { CHAPTERS, TEARDOWN_COPY } from './chapters.ts'
 import { FilmOverlay } from './overlay/FilmOverlay.tsx'
@@ -77,6 +78,10 @@ export function Film() {
   }, [])
   const [contextLost, setContextLost] = useState(false)
   const showFallback = !canRender || contextLost || reducedMotion
+  // The static story has no loader: clear the one index.html painted.
+  useLayoutEffect(() => {
+    if (showFallback) releaseBootLoader()
+  }, [showFallback])
 
   // Render the film only while it can be seen: the runway intersects the
   // viewport and the tab is visible. A boolean that flips at most twice per

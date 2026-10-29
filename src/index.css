@@ -324,10 +324,13 @@
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   animation: film-loader-draw 1.1s var(--ease-out-quint) forwards;
+  /* On a cold load, carry on from the boot loader's draw (index.html)
+     instead of starting again: --boot-elapsed is how far it got. */
+  animation-delay: calc(0ms - var(--boot-elapsed, 0ms));
 }
 
 .film-loader-draw--late {
-  animation-delay: 0.25s;
+  animation-delay: calc(250ms - var(--boot-elapsed, 0ms));
 }
 
 @keyframes film-loader-draw {
