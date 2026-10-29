@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react'
+import { releaseBootLoader } from '../film/bootLoader.ts'
 
 interface Props {
   routeName: string
@@ -15,6 +16,11 @@ export class RouteErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(): State {
     return { hasError: true }
+  }
+
+  /** The fallback must be seen: clear the home page's boot loader. */
+  componentDidCatch(): void {
+    releaseBootLoader()
   }
 
   render(): ReactNode {

@@ -16,8 +16,116 @@
         // Paint the room dark before the stylesheet arrives (no white flash).
         document.documentElement.style.background = '#07080b'
         document.querySelector('meta[name="theme-color"]').content = '#07080b'
+        // A cold load of the film shows its loader first, before any script
+        // or page content (#boot-loader below; FilmLoader takes it over in
+        // the same frame). Deep links, ?nogl and reduced motion get none,
+        // as in FilmLoader. Scrolling is held while it shows.
+        ;(function () {
+          var q = new URLSearchParams(location.search)
+          var still = matchMedia('(prefers-reduced-motion: reduce)').matches
+          if (location.hash !== '' || q.has('t') || q.has('nogl') || still) return
+          document.documentElement.dataset.boot = 'film'
+          window.__bootT0 = performance.now()
+          var hold = function (e) {
+            e.preventDefault()
+          }
+          var keys = function (e) {
+            if (
+              [' ', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'Home', 'End'].indexOf(e.key) >= 0
+            )
+              e.preventDefault()
+          }
+          addEventListener('wheel', hold, { passive: false })
+          addEventListener('touchmove', hold, { passive: false })
+          addEventListener('keydown', keys, true)
+          window.__bootRelease = function () {
+            removeEventListener('wheel', hold)
+            removeEventListener('touchmove', hold)
+            removeEventListener('keydown', keys, true)
+            delete document.documentElement.dataset.boot
+            var el = document.getElementById('boot-loader')
+            if (el) el.remove()
+          }
+          // Never strand a visitor behind it if the app fails to start.
+          setTimeout(window.__bootRelease, 20000)
+        })()
       }
     </script>
+    <style>
+      /* The boot loader: FilmLoader's first frame (dark theme), static. */
+      #boot-loader {
+        display: none;
+      }
+      html[data-boot='film'] #boot-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 45;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(900px 520px at 50% -10%, rgba(150, 170, 220, 0.12), transparent 70%),
+          #07080b;
+      }
+      #boot-loader .bl-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      #boot-loader .bl-phone {
+        position: relative;
+        aspect-ratio: 160 / 332;
+        height: min(46vh, 22rem);
+      }
+      #boot-loader svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      #boot-loader .bl-draw {
+        fill: none;
+        stroke: #f2f2f4;
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+        animation: bl-draw 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      }
+      #boot-loader .bl-late {
+        animation-delay: 0.25s;
+      }
+      @keyframes bl-draw {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      #boot-loader p {
+        margin: 0;
+        font-feature-settings: 'ss01', 'cv11';
+        -webkit-font-smoothing: antialiased;
+      }
+      #boot-loader .bl-name {
+        margin-top: 2rem;
+        font:
+          500 0.875rem / 1.25rem 'Geist Variable',
+          ui-sans-serif,
+          system-ui,
+          'Segoe UI',
+          sans-serif;
+        letter-spacing: -0.01em;
+        color: #f2f2f4;
+      }
+      #boot-loader .bl-step {
+        margin-top: 0.5rem;
+        font:
+          500 11px / 1.5 'Geist Mono Variable',
+          ui-monospace,
+          'SF Mono',
+          Menlo,
+          monospace;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: #a8adbf;
+      }
+    </style>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Aether One X" />
     <meta property="og:title" content="Aether One X — Power, without the noise." />
@@ -34,6 +142,44 @@
     <title>Aether One X — Power, without the noise.</title>
   </head>
   <body>
+    <div id="boot-loader" role="progressbar" aria-label="Loading the Aether One X film">
+      <div class="bl-col">
+        <div class="bl-phone">
+          <svg viewBox="0 0 160 332" aria-hidden="true">
+            <rect x="2" y="2" width="156" height="328" rx="27" fill="#171a21" />
+            <rect x="8" y="8" width="144" height="316" rx="21" fill="#050608" />
+          </svg>
+          <svg viewBox="0 0 160 332" aria-hidden="true">
+            <rect
+              class="bl-draw"
+              x="2"
+              y="2"
+              width="156"
+              height="328"
+              rx="27"
+              pathLength="1"
+              stroke-width="1.4"
+              vector-effect="non-scaling-stroke"
+            />
+            <rect
+              class="bl-draw bl-late"
+              x="8"
+              y="8"
+              width="144"
+              height="316"
+              rx="21"
+              pathLength="1"
+              stroke-opacity="0.35"
+              stroke-width="1"
+              vector-effect="non-scaling-stroke"
+            />
+            <circle cx="80" cy="20" r="3.4" fill="#f2f2f4" />
+          </svg>
+        </div>
+        <p class="bl-name">Aether One X</p>
+        <p class="bl-step">Opening</p>
+      </div>
+    </div>
     <div id="root"></div>
     <noscript>
       <main>

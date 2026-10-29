@@ -2,6 +2,19 @@
 
 Newest first. One entry per session or stage.
 
+## 2026-10-29 - Loader first on a cold load (stopgap)
+
+- The owner saw the loading screen arrive after the home page. Measured at
+  4 Mbps: the page shell showed uncovered at 2.3 s and the loader came at
+  2.9 s. It lived inside the lazy home route and waited 160 ms more.
+- index.html now paints the loader's first frame itself (a boot loader:
+  static silhouette, outline draw, scroll hold), before any script loads.
+  FilmLoader takes it over in the same frame, continuing the draw. After
+  the fix the loader is up at 0.1 s and the page appears only as it
+  dissolves. Deep links, sub-pages, ?nogl and reduced motion get none; the
+  static film and the route error boundary release it, and it releases
+  itself after 20 s.
+
 ## 2026-10-28 - Dark home, stop-to-stop film, fuller copy, finish fan (stopgap)
 
 - Owner on round 6: pop-out still rushes out; the cream studio is now the

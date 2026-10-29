@@ -1,5 +1,6 @@
 import { useMotionValue, useScroll, type MotionValue } from 'motion/react'
-import { Suspense, lazy, useEffect, useRef, useState, type RefObject } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { releaseBootLoader } from './bootLoader.ts'
 import { PhoneFrame } from '../components/Phone/PhoneFrame.tsx'
 import { CHAPTERS, TEARDOWN_COPY } from './chapters.ts'
 import { FilmOverlay } from './overlay/FilmOverlay.tsx'
@@ -77,6 +78,10 @@ export function Film() {
   }, [])
   const [contextLost, setContextLost] = useState(false)
   const showFallback = !canRender || contextLost || reducedMotion
+  // The static story has no loader: clear the one index.html painted.
+  useLayoutEffect(() => {
+    if (showFallback) releaseBootLoader()
+  }, [showFallback])
 
   // Render the film only while it can be seen: the runway intersects the
   // viewport and the tab is visible. A boolean that flips at most twice per
@@ -148,6 +153,27 @@ export function Film() {
     const runwayEl = runway.current
     if (t === null || runwayEl === null) return
     scrollToProgress(runwayEl, t, 'instant')
+    // The page can still grow or shift after mount (fonts, lazy chunks, a
+    // slow first layout), which clamped or lost the jump now and then in
+    // WebKit and left the film at the top. Hold the position for the first
+    // two seconds; any reader input hands the scroll back at once.
+    const until = performance.now() + 2000
+    let raf = 0
+    const hold = (): void => {
+      if (performance.now() > until) return
+      const rect = runwayEl.getBoundingClientRect()
+      const want = rect.top + window.scrollY + t * (rect.height - window.innerHeight)
+      if (Math.abs(window.scrollY - want) > 2) scrollToProgress(runwayEl, t, 'instant')
+      raf = requestAnimationFrame(hold)
+    }
+    raf = requestAnimationFrame(hold)
+    const release = (): void => cancelAnimationFrame(raf)
+    const inputs = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const
+    for (const type of inputs) window.addEventListener(type, release, { passive: true })
+    return () => {
+      release()
+      for (const type of inputs) window.removeEventListener(type, release)
+    }
   }, [])
 
   if (showFallback) {

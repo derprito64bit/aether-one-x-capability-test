@@ -1,7 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { bootElapsedMs, bootLoaderShown, releaseBootLoader } from './bootLoader.ts'
 import { LOAD_EXPECTED_S, type LoadTracker } from './loadTracker.ts'
 
-/** Delay before showing: a warm-cache visit finishes first and never flashes. */
+/**
+ * Delay before showing when arriving from another page (client-side): a
+ * warm-cache visit finishes first and never flashes. A cold load shows at
+ * once, taking over the boot loader index.html painted (bootLoader.ts).
+ */
 const SHOW_AFTER_MS = 160
 /** Never strand a visitor behind the loader if something stalls. */
 const FAILSAFE_MS = 20000
@@ -64,8 +69,20 @@ export function FilmLoader({ tracker }: { tracker: LoadTracker }) {
   // frame inside it) never gets the loader: it would cover the very thing
   // the reader asked for while the 3D loads.
   const [phase, setPhase] = useState<Phase>(() =>
-    tracker.seen || tracker.complete() || deepLinked() ? 'gone' : 'pending',
+    tracker.seen || tracker.complete() || deepLinked()
+      ? 'gone'
+      : bootLoaderShown()
+        ? 'visible'
+        : 'pending',
   )
+  // The outline draw carries on from where the boot loader had it.
+  const [bootOffsetMs] = useState(() => (bootLoaderShown() ? bootElapsedMs() : 0))
+  // Take over from the boot loader before this frame paints (it and this
+  // loader look identical, so the swap is invisible), or clear it when no
+  // loader is wanted.
+  useLayoutEffect(() => {
+    if (phase !== 'pending') releaseBootLoader()
+  }, [phase])
   const rootRef = useRef<HTMLDivElement>(null)
   const maskRef = useRef<HTMLDivElement>(null)
   const wallRef = useRef<HTMLDivElement>(null)
@@ -249,11 +266,14 @@ export function FilmLoader({ tracker }: { tracker: LoadTracker }) {
       data-testid="film-loader"
       data-phase={phase}
       className="film-loader fixed inset-0 z-[45] grid place-items-center"
-      style={{
-        opacity: leaving ? 0 : 1,
-        transition: `opacity ${LEAVE_MS - 120}ms var(--ease-out-quint) 80ms`,
-        pointerEvents: leaving ? 'none' : 'auto',
-      }}
+      style={
+        {
+          opacity: leaving ? 0 : 1,
+          transition: `opacity ${LEAVE_MS - 120}ms var(--ease-out-quint) 80ms`,
+          pointerEvents: leaving ? 'none' : 'auto',
+          '--boot-elapsed': `${Math.round(bootOffsetMs)}ms`,
+        } as CSSProperties
+      }
     >
       <div className="flex flex-col items-center">
         <div
