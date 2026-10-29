@@ -153,6 +153,27 @@ export function Film() {
     const runwayEl = runway.current
     if (t === null || runwayEl === null) return
     scrollToProgress(runwayEl, t, 'instant')
+    // The page can still grow or shift after mount (fonts, lazy chunks, a
+    // slow first layout), which clamped or lost the jump now and then in
+    // WebKit and left the film at the top. Hold the position for the first
+    // two seconds; any reader input hands the scroll back at once.
+    const until = performance.now() + 2000
+    let raf = 0
+    const hold = (): void => {
+      if (performance.now() > until) return
+      const rect = runwayEl.getBoundingClientRect()
+      const want = rect.top + window.scrollY + t * (rect.height - window.innerHeight)
+      if (Math.abs(window.scrollY - want) > 2) scrollToProgress(runwayEl, t, 'instant')
+      raf = requestAnimationFrame(hold)
+    }
+    raf = requestAnimationFrame(hold)
+    const release = (): void => cancelAnimationFrame(raf)
+    const inputs = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const
+    for (const type of inputs) window.addEventListener(type, release, { passive: true })
+    return () => {
+      release()
+      for (const type of inputs) window.removeEventListener(type, release)
+    }
   }, [])
 
   if (showFallback) {
