@@ -23,7 +23,9 @@ Two repos, and they are not the same thing:
 
 - **Build repo** (this one): `C:\Users\Aaron\aether-one-x-v2`, git `master`.
 - **Deploy repo**: `C:\Users\Aaron\Documents\GitHub\muse-spark-testing`, git `main`,
-  GitHub `derprito64bit/muse-spark-testing`, Vercel Hobby auto-deploys.
+  GitHub `derprito64bit/aether-one-x-capability-test` (renamed from
+  `muse-spark-testing` on 2026-10-29; the local folder and the Vercel address
+  `muse-spark-testing.vercel.app` keep the old name), Vercel Hobby auto-deploys.
 
 **Sync ritual:** work in the build repo, then copy across excluding `.git`,
 `node_modules`, `dist`, `reference`, `test-results`, `playwright-report`,

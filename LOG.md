@@ -2,6 +2,20 @@
 
 Newest first. One entry per session or stage.
 
+## 2026-10-29 - Renamed as a prompting and design capability test
+
+- The owner asked for the GitHub name and description to present the
+  project as a prompting and design capability test, with a detailed account
+  of how it reached its level. Renamed `muse-spark-testing` to
+  `aether-one-x-capability-test` (the local folder and the Vercel address
+  keep the old name); new description and topics.
+- README rewritten around that story: who did what (owner briefs and
+  critique; an opencode agent for the September build, model not recorded;
+  Claude Code for PRs #1-#8; independent AI review), the timeline, the method,
+  the numbers, and what it does not prove. Facts came from three read-only
+  research agents and were checked by an independent fact-checker before
+  merge.
+
 ## 2026-10-29 - Loader first on a cold load (stopgap)
 
 - The owner saw the loading screen arrive after the home page. Measured at
