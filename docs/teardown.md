@@ -62,6 +62,17 @@ motion starts and ends at zero velocity; focus is 0 at d 0.20, 1 from 0.32
 to 0.68, 0 by 0.80. The shared teardown scalars follow scroll at 5/s (was
 7/s). The e2e card mapping is unchanged.
 
+**Round 07 (2026-10-28): showcased, never rushing.** Arrive d 0-0.38
+(slide 0-0.16, flight and turn 0.12-0.38 on an arc bowing an eighth of
+the flight), hold 0.38-0.62, leave 0.62-1. Focus 0 at 0.26, 1 from 0.40
+to 0.60, 0 by 0.74. Local layer-to-layer motion of the damped tour
+cursor is speed-capped at 0.75 layers/s (TOUR_MAX_SPEED: target inside
+the tour and at most 1.5 layers away), so no step can fly a part out in
+under ~0.5 s; long moves (approaching the tour, leaving it, or jumps over
+1.5 layers) run on the plain 5/s damping until they arrive. It still
+settles exactly at rest. The
+dimmed layers sit at 22% (they read as ghosts on the dark studio).
+
 The camera-layer beat (slide, lens-up turn, module rising to the
 housings) and the tour aim offset are retired: the camera bump stays
 bonded to the rear panel, and the internal camera modules are their own

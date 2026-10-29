@@ -509,11 +509,11 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
             labelRefs.current[i] = el
           }}
           data-testid={`showcase-callout-${item.key}`}
-          className="group absolute top-0 left-0 w-max max-w-(--label-w) rounded-md bg-[rgb(242_240_235/0.8)] px-1.5 py-0.5 group-data-[labels=over]/callouts:max-w-[10rem] group-data-[labels=over]/callouts:rounded-lg group-data-[labels=over]/callouts:bg-(--color-raise)/92 group-data-[labels=over]/callouts:px-2 group-data-[labels=over]/callouts:py-1 group-data-[labels=over]/callouts:shadow-[0_0_0_1px_var(--color-border-hairline),0_6px_16px_-8px_rgba(40,30,10,0.35)]"
+          className="group absolute top-0 left-0 w-max max-w-(--label-w) rounded-md bg-[rgb(var(--veil-rgb)/0.72)] px-1.5 py-0.5 group-data-[labels=over]/callouts:max-w-[10rem] group-data-[labels=over]/callouts:rounded-lg group-data-[labels=over]/callouts:bg-(--color-raise)/92 group-data-[labels=over]/callouts:px-2 group-data-[labels=over]/callouts:py-1 group-data-[labels=over]/callouts:shadow-[0_0_0_1px_var(--color-border-hairline),0_6px_16px_-8px_rgba(40,30,10,0.35)]"
           style={{
             opacity: 0,
             visibility: 'hidden',
-            textShadow: '0 0 6px rgb(242 240 235), 0 0 16px rgb(242 240 235)',
+            textShadow: '0 0 6px rgb(var(--veil-rgb)), 0 0 16px rgb(var(--veil-rgb))',
           }}
         >
           <p className="font-mono text-[11.5px] leading-[18px] font-medium tracking-[0.08em] text-(--color-ink) uppercase group-data-[side=left]:text-right group-data-[labels=over]/callouts:text-[10.5px]">
@@ -535,7 +535,7 @@ export function Callouts({ progress }: { progress: MotionValue<number> }) {
           }}
           data-testid={`showcase-layer-${copy.key}`}
           className="absolute top-0 left-0 flex w-max items-baseline gap-2 font-mono text-[10px] leading-[14px] tracking-[0.08em] uppercase md:text-[11px]"
-          style={{ opacity: 0, visibility: 'hidden', textShadow: '0 0 12px rgb(242 240 235)' }}
+          style={{ opacity: 0, visibility: 'hidden', textShadow: '0 0 12px rgb(var(--veil-rgb))' }}
         >
           <span className="text-(--color-faint) group-data-[overview=num]/film:font-medium group-data-[overview=num]/film:text-(--color-ink)">
             {String(i + 1).padStart(2, '0')}

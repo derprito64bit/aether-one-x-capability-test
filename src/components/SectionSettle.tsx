@@ -12,9 +12,10 @@ export function SectionSettle() {
   const { scrollY } = useScroll()
   useScrollSettle(
     scrollY,
-    (dir) => {
+    (dir, moved) => {
       const y = window.scrollY
       const vh = window.innerHeight
+      if (moved < vh * 0.03) return null
       const runway = document.querySelector<HTMLElement>('[data-testid="film-runway"]')
       if (runway !== null) {
         const top = runway.getBoundingClientRect().top + y
@@ -29,7 +30,8 @@ export function SectionSettle() {
         if (h <= 0) continue
         sections.push({ top: el.getBoundingClientRect().top + y, height: h })
       }
-      return pageSettleTarget(sections, y, vh, dir)
+      const target = pageSettleTarget(sections, y, vh, dir)
+      return target === null ? null : { y: target }
     },
     true,
   )

@@ -35,13 +35,13 @@ describe('resolveColumn', () => {
 
 describe('calloutReveal', () => {
   it('staggers labels in order and follows focus out', () => {
-    expect(calloutReveal(0.3, 0, 1)).toBe(0)
-    expect(calloutReveal(0.5, 0, 1)).toBe(1)
+    expect(calloutReveal(0.35, 0, 1)).toBe(0)
     // The fourth label is still arriving when the first is fully in.
-    expect(calloutReveal(0.4, 0, 1)).toBe(1)
-    expect(calloutReveal(0.4, 3, 1)).toBe(0)
-    // All four are in before the hold ends (0.70).
-    expect(calloutReveal(0.58, 3, 1)).toBe(1)
+    expect(calloutReveal(0.42, 0, 1)).toBe(1)
+    expect(calloutReveal(0.42, 3, 1)).toBe(0)
+    // Every label (a layer names up to four parts, chapters.test) is fully
+    // in before the auto-scroll's stop (d 0.5): all of a part's text shows.
+    for (let k = 0; k < 4; k++) expect(calloutReveal(0.5, k, 1), `label ${k}`).toBe(1)
     // Everything leaves with the part.
     expect(calloutReveal(0.6, 0, 0.25)).toBeCloseTo(0.25, 5)
   })

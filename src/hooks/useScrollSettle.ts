@@ -2,6 +2,12 @@ import { useEffect, useRef } from 'react'
 import type { MotionValue } from 'motion/react'
 import { animateScrollTo } from '../lib/settle.ts'
 
+/** Where a settle goes: a window scrollY, and optionally how long to take. */
+export interface SettleTarget {
+  y: number
+  ms?: number
+}
+
 /** Quiet time after the last scroll change before a settle is considered. */
 const IDLE_MS = 180
 /**
@@ -14,15 +20,16 @@ const INPUT_WINDOW_MS = 1500
 
 /**
  * Finishes a scroll for the reader: when `value` (a scroll-driven motion
- * value) comes to rest after real input, `decide(dir)` may return a window
- * scrollY to ease to (dir is the last direction of travel). Never while a
+ * value) comes to rest after a real input gesture, `decide(dir, moved)`
+ * may return where to ease to (dir: the gesture's direction; moved: how
+ * far it went, in the value's units). Never while a
  * finger rests on the glass, never after a scripted jump (deep link, rail,
  * test), never under reduced motion; any new input cancels at once. No
  * scroll listeners: it rides the motion value (film invariant 2).
  */
 export function useScrollSettle(
   value: MotionValue<number>,
-  decide: (dir: number) => number | null,
+  decide: (dir: number, moved: number) => SettleTarget | null,
   enabled: boolean,
 ): void {
   const decideRef = useRef(decide)
@@ -39,6 +46,8 @@ export function useScrollSettle(
     // The first scroll change after an input is the reader's, however late
     // a busy main thread delivers it.
     let pending = false
+    // Where the current gesture began (null between gestures).
+    let gestureFrom: number | null = null
     let cancelAnim: (() => void) | null = null
     const cancel = (): void => {
       window.clearTimeout(idle)
@@ -48,13 +57,19 @@ export function useScrollSettle(
     }
     const settle = (): void => {
       if (touching || !fromInput) return
-      const to = decideRef.current(dir)
+      const moved = gestureFrom === null ? 0 : Math.abs(last - gestureFrom)
+      gestureFrom = null
+      const to = decideRef.current(dir, moved)
       if (to === null) return
       settling = true
-      cancelAnim = animateScrollTo(to, () => {
-        settling = false
-        cancelAnim = null
-      })
+      cancelAnim = animateScrollTo(
+        to.y,
+        () => {
+          settling = false
+          cancelAnim = null
+        },
+        to.ms,
+      )
     }
     const onInput = (): void => {
       lastInput = performance.now()
@@ -83,6 +98,7 @@ export function useScrollSettle(
       }
       fromInput = pending || performance.now() - lastInput < INPUT_WINDOW_MS
       pending = false
+      if (fromInput && gestureFrom === null) gestureFrom = last
       if (v !== last) dir = v > last ? 1 : -1
       last = v
       window.clearTimeout(idle)

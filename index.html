@@ -9,6 +9,15 @@
       content="Aether One X v2, a fictional concept smartphone. A scroll-driven product film with real-time 3D. All specs are illustrative demonstration values."
     />
     <meta name="theme-color" content="#f2f0eb" />
+    <script>
+      // The home page is a dark room: theme it before first paint (no flash).
+      if (location.pathname === '/') {
+        document.documentElement.dataset.theme = 'dark'
+        // Paint the room dark before the stylesheet arrives (no white flash).
+        document.documentElement.style.background = '#07080b'
+        document.querySelector('meta[name="theme-color"]').content = '#07080b'
+      }
+    </script>
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Aether One X" />
     <meta property="og:title" content="Aether One X — Power, without the noise." />

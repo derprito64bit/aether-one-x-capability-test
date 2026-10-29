@@ -410,3 +410,63 @@
     -webkit-backdrop-filter: none;
   }
 }
+
+/*
+ * Dark room (home page, 2026-10-28). The owner asked for the home page to
+ * be a dark room with a spotlight on the phone, since every section room
+ * is dark and the porcelain studio had become the outlier. Set on <html>
+ * by an inline script in index.html (no light flash on load) and by
+ * HomePage while it is mounted; other pages keep the porcelain theme.
+ * Every component reads these tokens, so this is the whole switch.
+ */
+:root[data-theme='dark'] {
+  --color-night: #07080b;
+  --color-surface: #0e1015;
+  --color-elev: #12151b;
+  --color-raise: #171a21;
+  --color-sunken: #050608;
+  --color-ink: #f2f2f4;
+  --color-dim: #a8adbf;
+  --color-faint: #8f94a8;
+  --color-aether: #7fb4ff;
+  --color-aether-strong: #6aa6ff;
+  --color-aether-deep: #2f63c8;
+  --color-ink-inverse: #0b0c10;
+  --color-border-hairline: #232731;
+  --color-border-strong: #353a48;
+  --color-focus: #7fb4ff;
+  --glass-rim: rgba(255, 255, 255, 0.14);
+  color-scheme: dark;
+}
+
+:root[data-theme='dark'] body::before {
+  background: radial-gradient(1100px 560px at 50% -12%, rgba(120, 140, 190, 0.08), transparent 70%);
+}
+
+:root[data-theme='dark'] .panel {
+  box-shadow:
+    0 0 0 1px var(--color-border-hairline),
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 24px 60px -32px rgba(0, 0, 0, 0.7);
+}
+
+/* Configurator preview stage: a lit porcelain sweep, or on the dark home a
+   spotlight on the phone like the film's studio. */
+.buy-stage {
+  background:
+    radial-gradient(60% 55% at 50% 42%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 70%),
+    linear-gradient(180deg, #f3f1ec 0%, #e6e2d9 100%);
+}
+
+:root[data-theme='dark'] .buy-stage {
+  background:
+    radial-gradient(38% 52% at 50% 34%, rgba(200, 212, 240, 0.16), transparent 70%),
+    radial-gradient(30% 7% at 50% 84%, rgba(200, 212, 240, 0.12), transparent 75%),
+    linear-gradient(180deg, #111318 0%, #08090c 100%);
+}
+
+:root[data-theme='dark'] .film-loader {
+  background:
+    radial-gradient(900px 520px at 50% -10%, rgba(150, 170, 220, 0.12), transparent 70%),
+    var(--color-night);
+}

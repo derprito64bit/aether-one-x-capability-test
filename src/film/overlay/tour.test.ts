@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { ACTS } from '../timeline.ts'
 import {
-  HOLD_IN,
-  HOLD_OUT,
-  REST_ZONES,
+  FILM_STOPS,
+  TOUR_END,
   TOUR_START,
   TOUR_STEP,
+  actRestStart,
+  nextStop,
   playRate,
   rawCursor,
-  restTarget,
+  stopDurationMs,
 } from './tour.ts'
 
 const at = (cursor: number): number => TOUR_START + cursor * TOUR_STEP
+const actOf = (p: number): string | undefined =>
+  ACTS.find((a) => p >= a.start && p < a.end)?.id ?? (p >= 1 ? 'final' : undefined)
 
 describe('teardown tour', () => {
   it('reads the span off the layer cursor', () => {
@@ -26,50 +29,55 @@ describe('teardown tour', () => {
   })
 })
 
-describe('film rest map', () => {
-  it('lists zones in order, never overlapping', () => {
-    for (let i = 1; i < REST_ZONES.length; i++) {
-      const a = REST_ZONES[i - 1]
-      const b = REST_ZONES[i]
-      expect(a?.[1] ?? 0).toBeLessThan(b?.[0] ?? 0)
+describe('film stops', () => {
+  it('runs in order through every act, ending on the open fan', () => {
+    for (let i = 1; i < FILM_STOPS.length; i++) {
+      expect(FILM_STOPS[i] ?? 0).toBeGreaterThan(FILM_STOPS[i - 1] ?? 0)
     }
-    expect(REST_ZONES[0]?.[0]).toBe(0)
-    expect(REST_ZONES[REST_ZONES.length - 1]?.[1]).toBe(1)
+    const acts = new Set(FILM_STOPS.map(actOf))
+    for (const act of ACTS) expect(acts.has(act.id), act.id).toBe(true)
+    expect(FILM_STOPS[0]).toBe(0)
+    expect(FILM_STOPS[FILM_STOPS.length - 1] ?? 0).toBeGreaterThan(0.99)
   })
 
-  it('leaves a scroll at rest inside any zone', () => {
-    for (const act of ACTS) {
-      if (act.id === 'teardown') continue
-      expect(restTarget((act.start + act.end) / 2, 1), act.id).toBeNull()
-    }
+  it('stops on every teardown layer mid-hold', () => {
     for (let i = 0; i < 10; i++) {
-      expect(restTarget(at(i + 0.5), 1)).toBeNull()
-      expect(restTarget(at(i + HOLD_IN + 1e-4), -1)).toBeNull()
-      expect(restTarget(at(i + HOLD_OUT - 1e-4), 1)).toBeNull()
+      expect(
+        FILM_STOPS.some((s) => Math.abs(rawCursor(s) - (i + 0.5)) < 1e-9),
+        `layer ${i}`,
+      ).toBe(true)
     }
-    // The e2e card jumps land in holds (d = 0.25 is mid-arrival now, but
-    // those jumps are scripted, so they never settle).
-    expect(restTarget(0, 1)).toBeNull()
-    expect(restTarget(1, -1)).toBeNull()
   })
 
-  it('completes a move between sections in the direction of travel', () => {
-    // Just past the settle/approach boundary, scrolling down: into approach.
-    const fwd = restTarget(0.156, 1) ?? 0
-    expect(fwd).toBeGreaterThan(0.156)
-    expect(restTarget(fwd, 1)).toBeNull()
-    // Same spot scrolling up: back to the end of settle's zone.
-    const back = restTarget(0.156, -1) ?? 1
-    expect(back).toBeLessThan(0.155)
-    expect(restTarget(back, -1)).toBeNull()
-    // Mid-flight in the teardown: turn the page to the next layer.
-    expect(rawCursor(restTarget(at(3.85), 1) ?? 0)).toBeGreaterThan(4 + HOLD_IN)
-    expect(rawCursor(restTarget(at(3.85), -1) ?? 0)).toBeLessThan(3 + HOLD_OUT)
-    // The teardown's opening (lay down, peel, overview) can be scrubbed
-    // slowly: no settle mid-peel, in either direction.
-    expect(restTarget(0.275, 1)).toBeNull()
-    expect(restTarget(0.275, -1)).toBeNull()
-    // Leaving the overview toward layer 0 completes into its hold.
-    expect(rawCursor(restTarget(at(0.1), 1) ?? 0)).toBeGreaterThan(HOLD_IN)
+  it('carries a gesture to the next stop, either way', () => {
+    // Mid-way through an act, scrolling on: the next composed moment.
+    const s = nextStop(0.6, 1) ?? 0
+    expect(s).toBeGreaterThan(0.6)
+    expect(FILM_STOPS).toContain(s)
+    // Sitting on a stop never re-targets it.
+    const here = FILM_STOPS[5] ?? 0
+    expect(nextStop(here, 1)).toBe(FILM_STOPS[6])
+    expect(nextStop(here, -1)).toBe(FILM_STOPS[4])
+    // Layer to layer.
+    expect(rawCursor(nextStop(at(3.5), 1) ?? 0)).toBeCloseTo(4.5, 9)
+    expect(rawCursor(nextStop(at(3.5), -1) ?? 0)).toBeCloseTo(2.5, 9)
+    // Off the ends: the page takes over.
+    expect(nextStop(0.999, 1)).toBeNull()
+    expect(nextStop(0, -1)).toBeNull()
+  })
+
+  it('plays teardown layers slowly and longer stretches for longer', () => {
+    expect(stopDurationMs(at(3.5), at(4.5))).toBe(1800)
+    expect(stopDurationMs(0.5, 0.6)).toBeGreaterThan(stopDurationMs(0.5, 0.52))
+    expect(stopDurationMs(0, 1)).toBe(3200)
+    expect(TOUR_END).toBeCloseTo(0.495, 9)
+  })
+
+  it("lands act jumps on each act's first stop", () => {
+    for (const act of ACTS) {
+      const s = actRestStart(act.id)
+      expect(actOf(s), act.id).toBe(act.id)
+      expect(FILM_STOPS).toContain(s)
+    }
   })
 })

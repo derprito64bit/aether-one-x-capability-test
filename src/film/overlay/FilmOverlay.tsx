@@ -1,6 +1,13 @@
 import { PauseIcon, PlayIcon } from '../../components/icons.tsx'
 import { motion, useMotionValueEvent, type MotionValue } from 'motion/react'
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from 'react'
 import { Glass } from '../../components/Glass/Glass.tsx'
 import {
   CHAPTERS,
@@ -11,8 +18,7 @@ import {
 } from '../chapters.ts'
 import { inspectHit } from '../inspect.ts'
 import type { ActId } from '../key.ts'
-import { stageColors } from '../stage/stageColors.ts'
-import { darkWeight, studioWeight } from '../backdrop/scenes.ts'
+import { darkWeight } from '../backdrop/scenes.ts'
 import { runScramble } from '../../lib/scramble.ts'
 import { ScrambleText } from '../../components/ScrambleText.tsx'
 import { scrollToProgress } from '../scroll.ts'
@@ -21,12 +27,20 @@ import { ACTS } from '../timeline.ts'
 import { useChapter } from '../useChapter.ts'
 import { BigNumeral } from './BigNumeral.tsx'
 import { Callouts } from './Callouts.tsx'
+import { FanLabels } from './FanLabels.tsx'
 import { overlayCursor } from './callouts.ts'
 import { Headline } from './Headline.tsx'
 import { Kicker } from './Kicker.tsx'
 import { CHAPTER, ITEM } from './motion.ts'
-import { SpecLines } from './SpecLines.tsx'
-import { TOUR_END, TOUR_START, actRestStart, playRate, rawCursor, restTarget } from './tour.ts'
+import {
+  TOUR_END,
+  TOUR_START,
+  actRestStart,
+  nextStop,
+  playRate,
+  rawCursor,
+  stopDurationMs,
+} from './tour.ts'
 import { useScrollSettle } from '../../hooks/useScrollSettle.ts'
 import { XrayReadout } from './XrayReadout.tsx'
 
@@ -94,20 +108,29 @@ function stagger(n: number): CSSProperties {
   return { opacity: t, transform: `translateY(calc((1 - ${t}) * 10px))` }
 }
 
-/** A part's headline capabilities: figure first, then what it buys you. */
+/**
+ * Headline capabilities: figure first, then what it buys you. `decode`
+ * plays the figures' decode on mount (act chapters); teardown cards decode
+ * as they turn visible instead.
+ */
 function StatGrid({
   stats,
   columns,
   className = '',
+  decode = false,
 }: {
   stats: TeardownStat[]
   columns: 2 | 3
   className?: string
+  decode?: boolean
 }) {
   return (
     <dl
-      className={`mt-5 grid gap-x-6 gap-y-3.5 border-t border-(--color-border-hairline) pt-4 md:mt-7 md:gap-y-5 md:pt-6 ${
-        columns === 3 ? 'grid-cols-3' : 'grid-cols-2'
+      className={`mt-5 border-t border-(--color-border-hairline) pt-4 md:mt-7 md:pt-6 ${
+        // A row of three flows (values never wrap); four sit in a 2x2 grid.
+        columns === 3
+          ? 'flex flex-wrap gap-x-8 gap-y-3.5 md:gap-x-10'
+          : 'grid grid-cols-2 gap-x-6 gap-y-3.5 md:gap-y-5'
       } ${className}`}
     >
       {stats.map((stat, k) => (
@@ -115,8 +138,8 @@ function StatGrid({
           <dt className="mt-1 text-[11.5px] leading-snug text-(--color-dim) md:mt-1.5 md:text-[12.5px]">
             {stat.label}
           </dt>
-          <dd className="order-first flex items-baseline gap-1 font-mono text-[1.15rem] leading-none font-medium tracking-[-0.05em] text-(--color-ink) tabular-nums md:text-[clamp(1.3rem,1.75vw,1.75rem)]">
-            <ScrambleText auto={false} text={stat.value} />
+          <dd className="order-first flex items-baseline gap-1 font-mono whitespace-nowrap text-[1.15rem] leading-none font-medium tracking-[-0.05em] text-(--color-ink) tabular-nums md:text-[clamp(1.3rem,1.75vw,1.75rem)]">
+            <ScrambleText auto={decode} text={stat.value} />
             {stat.unit !== '' && (
               <span className="text-[0.52em] font-medium tracking-normal text-(--color-dim)">
                 {stat.unit}
@@ -287,21 +310,30 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     }
   }, [playing, runway])
 
-  // Section settle across the whole film: a scroll that comes to rest
-  // between sections (an act changing, a part half out of the stack)
-  // finishes that move in the direction of travel, so the film always rests
-  // on a composed shot. The page-level settle (SectionSettle) takes over at
-  // the runway's ends. Off while the tour plays.
+  // Stop to stop: a deliberate scroll gesture carries the reader all the
+  // way to the next composed moment in its direction (the next act, the
+  // next figure, the next teardown layer), and the film plays itself there
+  // at a showcase pace. Past the last stop it hands over to the buy deck.
+  // Tiny nudges (under ~3% of a screen) are left alone; any new input takes
+  // over at once. Off while the tour plays.
   useScrollSettle(
     progress,
-    (dir) => {
+    (dir, moved) => {
       const el = runway.current
       const p = progress.get()
-      if (el === null || p <= 0 || p >= 1) return null
-      const to = restTarget(p, dir)
-      if (to === null) return null
+      if (el === null) return null
       const rect = el.getBoundingClientRect()
-      return rect.top + window.scrollY + to * (rect.height - window.innerHeight)
+      const span = rect.height - window.innerHeight
+      if (span <= 0 || moved * span < window.innerHeight * 0.03) return null
+      const top = rect.top + window.scrollY
+      if (p >= 1 && dir > 0) return null
+      if (p <= 0 && dir < 0) return null
+      const to = nextStop(p, dir)
+      if (to === null) {
+        // Past the last stop going on: the section after the film.
+        return dir > 0 ? { y: top + rect.height, ms: 1400 } : null
+      }
+      return { y: top + to * span, ms: stopDurationMs(p, to) }
     },
     !playing,
   )
@@ -329,11 +361,9 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
   // Scroll-driven page tint (Prompt D section 8.1): the act colour at low
   // opacity over the page. Written straight to the DOM, never React state.
   // Hooks stay above the empty-chapters bail so the order never changes.
-  const tintRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
-  useMotionValueEvent(progress, 'change', (p) => {
-    const v = typeof p === 'number' ? p : 0
+  const applyProgress = (v: number): void => {
     // The camera macro fills the whole frame with the phone's back, so no
     // side is free: the copy rides a porcelain card for that span only.
     // Desktop only; mobile copy already sits over the bottom veil.
@@ -341,13 +371,6 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     if (card !== null) {
       const amount = window.innerWidth >= 768 ? macroCard(v) : 0
       card.style.setProperty('--card', amount.toFixed(3))
-    }
-    const { base } = stageColors(v)
-    // The act tint belongs to the studio sweep; scenes carry their own.
-    const tint = tintRef.current
-    if (tint !== null) {
-      tint.style.backgroundColor = `#${base.getHexString()}2e`
-      tint.style.opacity = studioWeight(v).toFixed(3)
     }
     // Copy tone follows the room (section scenes): ink in light rooms,
     // light type in the dark ones, over a veil that blends continuously.
@@ -363,7 +386,11 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       root.style.setProperty('--card-rgb', light ? '254 253 251' : '18 20 27')
       root.style.setProperty('--card-ring', light ? '220 216 207' : '52 57 74')
     }
-  })
+  }
+  useMotionValueEvent(progress, 'change', (p) => applyProgress(typeof p === 'number' ? p : 0))
+  // Tone the copy before the first paint too, not only on the first scroll:
+  // at p 0 the motion value never changes until the reader moves.
+  useLayoutEffect(() => applyProgress(progress.get()))
   if (chapter === undefined) return null
   const teardown = act.id === 'teardown'
   return (
@@ -378,7 +405,6 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
         } as CSSProperties
       }
     >
-      <div ref={tintRef} aria-hidden="true" className="absolute inset-0" />
       {/* Copy-side veils: crossfade with the act's side; never over the device. */}
       <div
         aria-hidden="true"
@@ -553,7 +579,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                 <Kicker>{chapter.kicker}</Kicker>
                 <Headline text={chapter.headline} />
                 <motion.p
-                  className="mt-4 max-w-[34ch] text-base leading-relaxed text-(--color-dim) md:text-lg"
+                  className="mt-3 max-w-[40ch] text-[13.5px] leading-[1.55] text-(--color-dim) md:mt-4 md:text-[16.5px] md:leading-relaxed"
                   variants={ITEM}
                 >
                   {chapter.body}
@@ -561,7 +587,11 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
                 {chapter.numeral !== undefined ? (
                   <BigNumeral numeral={chapter.numeral} quiet={numeralQuiet(act.id)} />
                 ) : null}
-                {chapter.spec !== undefined ? <SpecLines lines={chapter.spec} /> : null}
+                {chapter.facts !== undefined ? (
+                  <motion.div variants={ITEM}>
+                    <StatGrid stats={chapter.facts} columns={3} decode />
+                  </motion.div>
+                ) : null}
               </>
             )}
           </motion.div>
@@ -577,6 +607,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       ) : null}
 
       {teardown && <Callouts progress={progress} />}
+      {act.id === 'final' && <FanLabels />}
 
       {teardown ? (
         <button

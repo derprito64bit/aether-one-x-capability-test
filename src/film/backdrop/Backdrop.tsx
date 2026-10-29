@@ -27,7 +27,7 @@ const FIGURE_AT: Partial<
   camera: { x: 25, y: 45, w: 40 },
   display: { x: 77, y: 45, w: 27 },
   storage: { x: 54, y: 47, w: 16 },
-  battery: { x: 17.5, y: 80, w: 25 },
+  battery: { x: 17.5, y: 85, w: 24 },
   software: { x: 73, y: 46, w: 28 },
   ai: { x: 17, y: 46, w: 24 },
 }
@@ -187,6 +187,7 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
         <>
           <div className="bd-brush" />
           <div className="bd-sheen" />
+          <div className="bd-spot" />
           <div className="bd-horizon" />
         </>,
       )}
@@ -195,6 +196,7 @@ export function Backdrop({ progress }: { progress: MotionValue<number> }) {
         <>
           <div className="bd-streak bd-streak--a" />
           <div className="bd-streak bd-streak--b" />
+          <div className="bd-spot" />
           <div className="bd-horizon" />
         </>,
       )}

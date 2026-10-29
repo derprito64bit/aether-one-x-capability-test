@@ -3,6 +3,8 @@ import type { MotionValue } from 'motion/react'
 import { useRef, type MutableRefObject } from 'react'
 import * as THREE from 'three'
 import { centerBias } from './framing.ts'
+import { PORTRAIT_CENTER, PORTRAIT_SPAN, portraitWeight } from './portrait.ts'
+import { DIM } from '../components/PhoneViewer/phoneDimensions.ts'
 import { SHOTS, capAngularStep } from './shots.ts'
 import { STAGE_LIGHTING } from './lighting.ts'
 import { clearInspectPointer, setInspectPointer, tickInspect } from './inspect.ts'
@@ -31,7 +33,8 @@ import {
 import { SHOWCASE_LAYERS } from './teardown/showcaseLayers.ts'
 import { dieLiftFor, writeShowcaseBridge } from './teardown/bridgeWriter.ts'
 import { LID_SLOT } from './teardown/ShowcaseDimmer.tsx'
-import { cursorBridge } from './overlay/callouts.ts'
+import { cursorBridge, fanBridge } from './overlay/callouts.ts'
+import { createFanLayout, fanPhase, solveFan, type FanCamera } from './fan/fan.ts'
 import { blendSceneLight, createSceneLight, type BlendedRoomLight } from './sceneLighting.ts'
 import { filmTargetFov, sampleFilm, type FovScratch } from './sample.ts'
 import {
@@ -250,6 +253,11 @@ export interface FilmRefs {
   roomKey: MutableRefObject<THREE.DirectionalLight | null>
   roomRimL: MutableRefObject<THREE.DirectionalLight | null>
   roomRimR: MutableRefObject<THREE.DirectionalLight | null>
+  /** The spotlight's subject (world), written every frame for the stage. */
+  spotTarget: MutableRefObject<THREE.Vector3>
+  spotLight: MutableRefObject<THREE.SpotLight | null>
+  /** The five extra finish-fan cards (titanium..clear); card 0 is the hero. */
+  fanCards: MutableRefObject<Array<THREE.Group | null>>
   opticsSeparation: MutableRefObject<Record<string, THREE.Group | null>>
   screenMode: { current: ScreenMode }
   screenBrightness: { current: number }
@@ -290,7 +298,7 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     prepared: false,
     slide: new THREE.Vector3(),
     reducedQuery: null as MediaQueryList | null,
-    td: { sep: 0, tour: -3, cursor: 0, ready: false } as TeardownScalars,
+    td: { sep: 0, tour: -3, cursor: 0, ready: false, free: false } as TeardownScalars,
     show: createShowcaseState(),
     rig: createRigCamera(),
     poses: createLayerPoses(),
@@ -301,6 +309,26 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     goalTarget: new THREE.Vector3(),
     flex: null as THREE.Object3D | null,
     room: createSceneLight(),
+    heroPos: new THREE.Vector3(),
+    heroRot: new THREE.Euler(),
+    heroScale: 1,
+    heroReady: false,
+    heroQuat: new THREE.Quaternion(),
+    fanPhase: { t: 0, turn: 0, open: 0 },
+    fan: createFanLayout(),
+    fanCam: {
+      pos: new THREE.Vector3(),
+      quat: new THREE.Quaternion(),
+      fov: 22,
+      aspect: 1,
+    } as FanCamera,
+    lookM: new THREE.Matrix4(),
+    heroGoal: new THREE.Matrix4(),
+    goalBoxPos: new THREE.Vector3(),
+    goalBoxScale: new THREE.Vector3(),
+    goalEuler: new THREE.Euler(),
+    goalCorner: new THREE.Vector3(),
+    viewShift: 0,
     roomDir: new THREE.Vector3(),
     heroWorld: new THREE.Vector3(),
     glassDark: new THREE.Color(),
@@ -355,24 +383,28 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     // Hero pose first: the showcase rig frames the stack through it.
     const g = refs.hero.current
     if (g !== null) {
-      if (reduced) {
-        g.rotation.set(t.rx, t.ry, t.rz)
-        g.scale.setScalar(t.scale)
-        g.position.set(px, py, 0)
+      // The keyed pose is damped in scratch, never on the group itself, so
+      // the finish fan can override the group without feeding back into
+      // the damping (round 07).
+      if (reduced || !s.heroReady) {
+        s.heroRot.set(t.rx, t.ry, t.rz)
+        s.heroScale = t.scale
+        s.heroPos.set(px, py, 0)
+        s.heroReady = true
       } else {
         // Damped toward the sampled pose, then capped: a hard flick gets a
         // fast controlled move, never a whip (Prompt B section 7.2).
         const cap = shot.maxAngularVelocity
-        g.rotation.x = capRotation(g.rotation.x, t.rx, damp, cap, delta, reduced)
-        g.rotation.y = capRotation(g.rotation.y, t.ry, damp, cap, delta, reduced)
-        g.rotation.z = capRotation(g.rotation.z, t.rz, damp, cap, delta, reduced)
-        const ns = t.scale
-        g.scale.x += (ns - g.scale.x) * damp
-        g.scale.y += (ns - g.scale.y) * damp
-        g.scale.z += (ns - g.scale.z) * damp
-        g.position.x += (px - g.position.x) * damp
-        g.position.y += (py - g.position.y) * damp
+        s.heroRot.x = capRotation(s.heroRot.x, t.rx, damp, cap, delta, reduced)
+        s.heroRot.y = capRotation(s.heroRot.y, t.ry, damp, cap, delta, reduced)
+        s.heroRot.z = capRotation(s.heroRot.z, t.rz, damp, cap, delta, reduced)
+        s.heroScale += (t.scale - s.heroScale) * damp
+        s.heroPos.x += (px - s.heroPos.x) * damp
+        s.heroPos.y += (py - s.heroPos.y) * damp
       }
+      g.rotation.copy(s.heroRot)
+      g.scale.setScalar(s.heroScale)
+      g.position.copy(s.heroPos)
       g.updateWorldMatrix(true, false)
       // Internals ride the hero transform exactly: without this lock the
       // exploded parts sit in unrotated space while the shell turns. Copies
@@ -438,7 +470,116 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
       reduced ? null : st.layerCursor,
       s.fov,
     )
-    const targetFov = keyedFov + (s.rig.fov - keyedFov) * rigW
+    let targetFov = keyedFov + (s.rig.fov - keyedFov) * rigW
+    // Finish fan (final act): the hero turns its back to the camera and
+    // becomes card 0; five rear shells fan out beside it. Placed in front
+    // of the act's goal camera, so it is a pure function of progress.
+    const fp = fanPhase(p, s.fanPhase)
+    const fanOn = g !== null && (fp.turn > 0 || fp.open > 0)
+    if (fanOn && g !== null) {
+      const fc = s.fanCam
+      fc.pos.copy(t.pos)
+      fc.quat.setFromRotationMatrix(s.lookM.lookAt(t.pos, t.target, cam.up))
+      fc.fov = keyedFov
+      fc.aspect = aspect
+      const fan = solveFan(s.fan, fc, fp.open, t.scale)
+      const card0 = fan.cards[0]
+      if (card0 !== undefined) {
+        g.position.copy(s.heroPos).lerp(card0.pos, fp.turn)
+        s.heroQuat.setFromEuler(s.heroRot)
+        g.quaternion.slerpQuaternions(s.heroQuat, card0.quat, fp.turn)
+        g.scale.setScalar(s.heroScale + (fan.scale - s.heroScale) * fp.turn)
+        g.updateWorldMatrix(true, false)
+        const ig = refs.internals.current
+        if (ig !== null) {
+          ig.position.copy(g.position)
+          ig.quaternion.copy(g.quaternion)
+          ig.scale.copy(g.scale)
+        }
+      }
+    }
+    // Portrait placement (round 07): on phones the copy card owns the
+    // bottom ~45%, so outside the teardown (its own slot), the camera macro
+    // dive, the battery x-ray, and the fan (its own framing), the phone is
+    // fitted into the top ~55%, centred: the lens widens until the goal
+    // pose's box fits, and a vertical view offset lifts it (projection
+    // only, the camera pose is untouched). Pure in progress and aspect.
+    const portraitW = aspect < 1 ? portraitWeight(p) * (1 - fp.turn) : 0
+    if (portraitW > 0.001) {
+      cam.updateMatrixWorld()
+      s.heroGoal.compose(
+        s.goalBoxPos.set(px, py, 0),
+        s.heroQuat.setFromEuler(s.goalEuler.set(t.rx, t.ry, t.rz)),
+        s.goalBoxScale.setScalar(t.scale),
+      )
+      const tanV = Math.tan((targetFov * Math.PI) / 360)
+      let y0 = Infinity
+      let y1 = -Infinity
+      for (let k = 0; k < 8; k++) {
+        s.goalCorner
+          .set(
+            k & 1 ? DIM.w / 2 : -DIM.w / 2,
+            k & 2 ? DIM.h / 2 : -DIM.h / 2,
+            k & 4 ? DIM.t / 2 : -DIM.t / 2,
+          )
+          .applyMatrix4(s.heroGoal)
+          .applyMatrix4(cam.matrixWorldInverse)
+        const ny = s.goalCorner.y / (Math.max(1e-4, -s.goalCorner.z) * tanV)
+        y0 = Math.min(y0, ny)
+        y1 = Math.max(y1, ny)
+      }
+      // Region: y 4%-55% of the height = NDC -0.1..0.92.
+      const k = Math.max(1, (y1 - y0) / PORTRAIT_SPAN)
+      const kEff = 1 + (k - 1) * portraitW
+      targetFov = (2 * Math.atan(tanV * kEff) * 180) / Math.PI
+      const shift = (PORTRAIT_CENTER - (y0 + y1) / 2 / kEff) * portraitW
+      s.viewShift = shift
+    } else {
+      s.viewShift = 0
+    }
+    const shiftPx = (s.viewShift * state.size.height) / 2
+    if (Math.abs(shiftPx) > 0.01) {
+      cam.setViewOffset(
+        state.size.width,
+        state.size.height,
+        0,
+        shiftPx,
+        state.size.width,
+        state.size.height,
+      )
+    } else if (cam.view !== null && cam.view.enabled) {
+      cam.clearViewOffset()
+    }
+    // Once the hero shows only its back, its front stack (glass, display)
+    // is fully hidden behind it: skip those draws so the six-phone fan
+    // stays inside the triangle budget. No visible change.
+    const backOnly = fanOn && fp.turn > 0.999
+    if (refs.glass.current !== null) refs.glass.current.visible = !backOnly
+    if (refs.display.current !== null) refs.display.current.visible = !backOnly
+    const fanCards = refs.fanCards.current
+    for (let k = 0; k < fanCards.length; k++) {
+      const card = fanCards[k]
+      if (card === null || card === undefined) continue
+      const pose = s.fan.cards[k + 1]
+      const show = fanOn && fp.open > 0.001 && pose !== undefined
+      card.visible = show
+      if (show && pose !== undefined) {
+        card.position.copy(pose.pos)
+        card.quaternion.copy(pose.quat)
+        card.scale.setScalar(s.fan.scale)
+      }
+    }
+    fanBridge.open = fanOn ? fp.open : 0
+    fanBridge.stamp = performance.now()
+    for (let k = 0; k < fanBridge.anchors.length; k++) {
+      const a = fanBridge.anchors[k]
+      const pose = s.fan.cards[k]
+      if (a === undefined || pose === undefined) continue
+      a.on = fanOn && fp.open > 0.05
+      a.x = pose.anchor.x
+      a.y = pose.anchor.y
+      a.z = pose.anchor.z
+    }
     if (reduced) {
       if (Math.abs(cam.fov - targetFov) > 0.001) {
         cam.fov = targetFov
@@ -562,6 +703,20 @@ export function FilmDirector({ progress, materials, refs }: FilmDirectorProps) {
     const heroGroup = refs.hero.current
     if (heroGroup !== null) heroGroup.getWorldPosition(s.heroWorld)
     else s.heroWorld.set(0, 0, 0)
+    refs.spotTarget.current.copy(s.heroWorld)
+    if (fanOn) refs.spotTarget.current.lerp(s.fan.center, fp.turn)
+    const spot = refs.spotLight.current
+    if (spot !== null) {
+      spot.intensity = room.spot
+      if (room.spot > 0) {
+        // Straight above the subject, a touch toward the camera side.
+        spot.position.copy(s.heroWorld)
+        spot.position.y += 0.95
+        spot.position.z += 0.12
+        spot.target.position.copy(s.heroWorld)
+        spot.target.updateMatrixWorld()
+      }
+    }
     aimRoomLight(refs.roomKey.current, room.key, cam, s.heroWorld, s.roomDir)
     aimRoomLight(refs.roomRimL.current, room.rimL, cam, s.heroWorld, s.roomDir)
     aimRoomLight(refs.roomRimR.current, room.rimR, cam, s.heroWorld, s.roomDir)

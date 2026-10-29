@@ -54,9 +54,17 @@ const wallAt = (s: number): Keyframe => ({
  * edge rides the mask. At 100% the silhouette scales toward the hero phone
  * while the veil dissolves into the film's first frame.
  */
+/** True when the page was opened at a specific place (a hash or ?t=). */
+function deepLinked(): boolean {
+  return window.location.hash !== '' || new URLSearchParams(window.location.search).has('t')
+}
+
 export function FilmLoader({ tracker }: { tracker: LoadTracker }) {
+  // A link that lands somewhere specific (/#buy below the film, or a ?t=
+  // frame inside it) never gets the loader: it would cover the very thing
+  // the reader asked for while the 3D loads.
   const [phase, setPhase] = useState<Phase>(() =>
-    tracker.seen || tracker.complete() ? 'gone' : 'pending',
+    tracker.seen || tracker.complete() || deepLinked() ? 'gone' : 'pending',
   )
   const rootRef = useRef<HTMLDivElement>(null)
   const maskRef = useRef<HTMLDivElement>(null)
@@ -206,14 +214,23 @@ export function FilmLoader({ tracker }: { tracker: LoadTracker }) {
     return () => window.clearTimeout(t)
   }, [phase, tracker])
 
-  // Hold the page still only while the loader is on screen.
+  // Hold the page still only while the loader is on screen, by refusing
+  // scroll input rather than toggling overflow on <html>: WebKit can drop
+  // the scroll position when the root's overflow changes.
   useEffect(() => {
     if (phase !== 'visible') return
-    const html = document.documentElement
-    const prev = html.style.overflow
-    html.style.overflow = 'hidden'
+    const block = (event: Event): void => event.preventDefault()
+    const keys = new Set([' ', 'PageDown', 'PageUp', 'ArrowDown', 'ArrowUp', 'Home', 'End'])
+    const blockKeys = (event: KeyboardEvent): void => {
+      if (keys.has(event.key)) event.preventDefault()
+    }
+    window.addEventListener('wheel', block, { passive: false })
+    window.addEventListener('touchmove', block, { passive: false })
+    window.addEventListener('keydown', blockKeys)
     return () => {
-      html.style.overflow = prev
+      window.removeEventListener('wheel', block)
+      window.removeEventListener('touchmove', block)
+      window.removeEventListener('keydown', blockKeys)
     }
   }, [phase])
 

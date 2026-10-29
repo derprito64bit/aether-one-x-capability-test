@@ -50,14 +50,7 @@ function BuyDeckInner() {
         {/* Stage: sticky on desktop so the phone stays beside every choice. */}
         <div className="lg:sticky lg:top-24 lg:self-start">
           <div className="panel relative overflow-hidden">
-            <div
-              aria-hidden="true"
-              className="absolute inset-0"
-              style={{
-                background:
-                  'radial-gradient(60% 55% at 50% 42%, rgba(255,255,255,0.95), rgba(255,255,255,0) 70%), linear-gradient(180deg, #f3f1ec 0%, #e6e2d9 100%)',
-              }}
-            />
+            <div aria-hidden="true" className="buy-stage absolute inset-0" />
             <div className="relative">
               <PhoneViewer
                 pose="hero"

@@ -6,16 +6,22 @@ import { SCENE_LIGHT, blendSceneLight, createSceneLight } from './sceneLighting.
 describe('section-scene lighting', () => {
   const out = createSceneLight()
 
-  it('leaves the studio rig untouched in the light rooms', () => {
+  it('lights the spot rooms (studio, titanium, glass) from the overhead spot', () => {
     for (const act of ACTS) {
       const scene = ACT_SCENE[act.id]
-      if (DARK_SCENES.has(scene)) continue
-      const mid = (act.start + act.end) / 2
-      blendSceneLight(mid, out)
-      expect(out.studio, act.id).toBe(1)
-      expect(out.env, act.id).toBe(1)
-      expect(out.exposure, act.id).toBe(1)
-      expect(out.key.intensity + out.rimL.intensity + out.rimR.intensity, act.id).toBe(0)
+      if (scene !== 'studio' && scene !== 'titanium' && scene !== 'glass') continue
+      blendSceneLight((act.start + act.end) / 2, out)
+      expect(out.spot, act.id).toBeGreaterThan(0)
+      expect(out.key.dir.y, act.id).toBeGreaterThan(0.8)
+      expect(out.rimL.intensity, act.id).toBeGreaterThan(0)
+      expect(out.rimR.intensity, act.id).toBeGreaterThan(0)
+      expect(out.studio, act.id).toBeLessThan(0.5)
+    }
+  })
+
+  it('keeps the overhead spot off in the coloured rooms', () => {
+    for (const p of [0.6, 0.78, 0.865, 0.91, 0.94, 0.962]) {
+      expect(blendSceneLight(p, out).spot, `p=${p}`).toBe(0)
     }
   })
 

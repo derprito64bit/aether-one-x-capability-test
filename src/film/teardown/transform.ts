@@ -11,10 +11,25 @@ export interface TeardownScalars {
   /** The tour cursor clamped to the layer run, 0..10 (overlay copy). */
   cursor: number
   ready: boolean
+  /**
+   * True while a long move (approaching the tour from outside, leaving
+   * it, or a jump of more than LOCAL_SPAN layers) is settling: the speed
+   * cap is off until the cursor arrives, so long moves never crawl.
+   */
+  free: boolean
 }
 
 /** Rate at which the shared teardown scalars follow scroll, per second. */
 const TEARDOWN_FOLLOW = 5
+/** Fastest the damped tour cursor may travel, in layers per second. */
+export const TOUR_MAX_SPEED = 0.75
+/** Moves longer than this (layers) are long moves: uncapped. */
+export const LOCAL_SPAN = 1.5
+/** The cap only governs targets inside the tour (with a half-layer margin). */
+const TOUR_MIN = -0.5
+const TOUR_MAX = 10.5
+/** A free (long) move hands back to the cap once this close (layers). */
+const FREE_SETTLE = 0.05
 
 /**
  * Damps the teardown's shared scalars (separation and tour cursor) toward
@@ -33,7 +48,24 @@ export function dampTeardownScalars(
 ): void {
   const k = reduced || !state.ready ? 1 : 1 - Math.exp(-delta * TEARDOWN_FOLLOW)
   state.sep += (sep - state.sep) * k
-  state.tour += (tour - state.tour) * k
+  // Speed cap (round 07), local motion only: a layer-to-layer step (the
+  // target inside the tour and at most LOCAL_SPAN layers away) never moves
+  // faster than TOUR_MAX_SPEED layers per second, so no part flies out in
+  // under ~0.5 s. A long move (approaching from outside the tour, leaving
+  // it, or a jump of more than LOCAL_SPAN layers) runs on the plain 5/s
+  // damping and stays free until it arrives (within FREE_SETTLE), so it
+  // never crawls and never brakes mid-way. At rest the cursor still
+  // settles exactly (the snap below); a reverse scrub ends on the same
+  // goals.
+  const gap = Math.abs(tour - state.tour)
+  if (tour < TOUR_MIN || tour > TOUR_MAX || gap > LOCAL_SPAN) state.free = true
+  else if (state.free && gap < FREE_SETTLE) state.free = false
+  let step = (tour - state.tour) * k
+  if (k < 1 && !state.free) {
+    const cap = TOUR_MAX_SPEED * delta
+    step = Math.max(-cap, Math.min(cap, step))
+  }
+  state.tour += step
   if (Math.abs(sep - state.sep) < 1e-5) state.sep = sep
   if (Math.abs(tour - state.tour) < 1e-4) state.tour = tour
   state.cursor = Math.min(10, Math.max(0, state.tour))

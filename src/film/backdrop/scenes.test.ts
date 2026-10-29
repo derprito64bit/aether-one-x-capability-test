@@ -45,11 +45,8 @@ describe('section scenes', () => {
     expect(studioWeight(0.52 + SCENE_FADE)).toBe(0)
   })
 
-  it('runs dark from the camera to the AI act, light around it', () => {
-    expect(darkWeight(0.05)).toBe(0)
-    expect(darkWeight(0.4)).toBe(0)
-    for (const p of [0.6, 0.78, 0.865, 0.91, 0.94, 0.962]) expect(darkWeight(p)).toBe(1)
-    expect(darkWeight(0.99)).toBe(0)
+  it('is a dark room from the first frame to the last (home is a dark room)', () => {
+    for (let p = 0; p <= 1; p += 0.001) expect(darkWeight(p), `p=${p}`).toBe(1)
   })
 })
 

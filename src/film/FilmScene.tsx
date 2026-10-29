@@ -21,6 +21,7 @@ import { Stage } from './stage/Stage.tsx'
 import { LAYER_GAP } from './teardown/layers.ts'
 import { createLayerPoses } from './teardown/showcase.ts'
 import { ShowcaseDimmer } from './teardown/ShowcaseDimmer.tsx'
+import { FinishFan } from './fan/FinishFan.tsx'
 import { calloutBridge } from './overlay/callouts.ts'
 import type { MotionValue } from 'motion/react'
 
@@ -73,6 +74,9 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
   const roomKey = useRef<THREE.DirectionalLight | null>(null)
   const roomRimL = useRef<THREE.DirectionalLight | null>(null)
   const roomRimR = useRef<THREE.DirectionalLight | null>(null)
+  const spotTarget = useRef(new THREE.Vector3())
+  const spotLight = useRef<THREE.SpotLight | null>(null)
+  const fanCards = useRef<Array<THREE.Group | null>>([])
   const internalsControl = useRef<InternalsControl>({
     opacity: 0,
     explode: 0,
@@ -161,6 +165,9 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
       roomKey,
       roomRimL,
       roomRimR,
+      spotTarget,
+      spotLight,
+      fanCards,
       opticsSeparation,
       screenMode: screen.modeRef,
       screenBrightness: screen.brightnessRef,
@@ -201,8 +208,20 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
       <directionalLight ref={roomKey} intensity={0} color="#ffffff" />
       <directionalLight ref={roomRimL} intensity={0} color="#ffffff" />
       <directionalLight ref={roomRimR} intensity={0} color="#ffffff" />
+      {/* Overhead spotlight for the dark studio (round 07): inverse-square
+          falloff and a soft penumbra give the phone its top-down gradient.
+          Always present (intensity 0 elsewhere): no light-count recompiles. */}
+      <spotLight
+        ref={spotLight}
+        intensity={0}
+        angle={0.7}
+        penumbra={0.85}
+        decay={2}
+        distance={0}
+        color="#f2f5ff"
+      />
       <StudioEnvironment />
-      <Stage progress={progress} />
+      <Stage progress={progress} target={spotTarget} />
       <group ref={hero}>
         <PhoneConfigProvider>
           <PhoneModel
@@ -213,6 +232,7 @@ export function FilmScene({ progress, parallaxX, parallaxY, label }: FilmScenePr
           />
         </PhoneConfigProvider>
       </group>
+      <FinishFan base={materials} cards={fanCards} />
       <group ref={internals}>
         <Internals materials={internalsMaterials} control={internalsControl} />
       </group>
