@@ -52,17 +52,22 @@ const ACT_LABELS: Record<ActId, string> = {
 }
 
 /**
- * Porcelain veils behind the copy column (page token, varying alpha).
+ * Veils behind the copy column, in the room's colour (--veil-rgb).
  * Eased stops: a linear ramp to zero leaves a visible Mach band where it
- * ends, which reads as a panel edge cutting the stage.
+ * ends, which reads as a panel edge cutting the stage. The side veils
+ * scale by --veil-k: a dark room is already dark behind the copy, so the
+ * veil eases off there and stops greying out the room's wall figure. The
+ * phone veil (bottom) stays full: phone copy sits over the device itself.
  */
-const VEIL_STOPS = (dir: string, reach: number): string => {
+const VEIL_STOPS = (dir: string, reach: number, first = 0.8, scaled = true): string => {
   const at = (f: number): string => `${(f * reach).toFixed(1)}%`
-  return `linear-gradient(${dir}, rgb(var(--veil-rgb) / 0.8) 0%, rgb(var(--veil-rgb) / 0.7) ${at(0.3)}, rgb(var(--veil-rgb) / 0.48) ${at(0.55)}, rgb(var(--veil-rgb) / 0.22) ${at(0.75)}, rgb(var(--veil-rgb) / 0.07) ${at(0.9)}, rgb(var(--veil-rgb) / 0) ${at(1)})`
+  const a = (alpha: number): string =>
+    scaled ? `calc(${alpha} * var(--veil-k, 1))` : String(alpha)
+  return `linear-gradient(${dir}, rgb(var(--veil-rgb) / ${a(first)}) 0%, rgb(var(--veil-rgb) / ${a(0.7)}) ${at(0.3)}, rgb(var(--veil-rgb) / ${a(0.48)}) ${at(0.55)}, rgb(var(--veil-rgb) / ${a(0.22)}) ${at(0.75)}, rgb(var(--veil-rgb) / ${a(0.07)}) ${at(0.9)}, rgb(var(--veil-rgb) / 0) ${at(1)})`
 }
 const VEIL_LEFT = VEIL_STOPS('to right', 50)
 const VEIL_RIGHT = VEIL_STOPS('to left', 50)
-const VEIL_BOTTOM = VEIL_STOPS('to top', 62).replace('/ 0.8)', '/ 0.95)')
+const VEIL_BOTTOM = VEIL_STOPS('to top', 62, 0.95, false)
 
 /** 0..1 copy-card strength across the camera macro dive (p ~0.63-0.72). */
 function macroCard(p: number): number {
@@ -352,6 +357,7 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
       root.classList.toggle('dark-scope', !light)
       const mix = (a: number, b: number): number => Math.round(a + (b - a) * dark)
       root.style.setProperty('--veil-rgb', `${mix(242, 7)} ${mix(240, 8)} ${mix(235, 11)}`)
+      root.style.setProperty('--veil-k', (1 - 0.5 * dark).toFixed(3))
       root.style.setProperty('--card-rgb', light ? '254 253 251' : '18 20 27')
       root.style.setProperty('--card-ring', light ? '220 216 207' : '52 57 74')
     }
