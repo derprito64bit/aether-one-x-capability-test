@@ -225,7 +225,15 @@ test('teardown play auto-scrolls the showcase (overnight watchability)', async (
   await page.goto('/')
   await skipWithoutWebgl(page)
   await expect(page.getByTestId('film-runway')).toBeVisible()
-  await page.getByRole('link', { name: 'Act 4: teardown' }).click()
+  // Scripted jump to the teardown's opening. A rail click this early can
+  // be cut short by the film loader's scroll hold on a slow cold load (a
+  // reader cannot click the rail then: the loader covers it).
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="film-runway"]') as HTMLElement
+    document.documentElement.style.scrollBehavior = 'auto'
+    const top = el.getBoundingClientRect().top + window.scrollY
+    window.scrollTo(0, top + 0.262 * (el.offsetHeight - window.innerHeight))
+  })
   await expect(page.getByTestId('film-chapter')).toHaveAttribute('data-act', 'teardown', {
     timeout: 15000,
   })
