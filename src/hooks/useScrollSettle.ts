@@ -36,6 +36,9 @@ export function useScrollSettle(
     let touching = false
     let settling = false
     let fromInput = false
+    // The first scroll change after an input is the reader's, however late
+    // a busy main thread delivers it.
+    let pending = false
     let cancelAnim: (() => void) | null = null
     const cancel = (): void => {
       window.clearTimeout(idle)
@@ -55,6 +58,7 @@ export function useScrollSettle(
     }
     const onInput = (): void => {
       lastInput = performance.now()
+      pending = true
       cancel()
     }
     // A press (rail, link, scrollbar, Play) stops a running settle but is
@@ -77,7 +81,8 @@ export function useScrollSettle(
         last = v
         return
       }
-      fromInput = performance.now() - lastInput < INPUT_WINDOW_MS
+      fromInput = pending || performance.now() - lastInput < INPUT_WINDOW_MS
+      pending = false
       if (v !== last) dir = v > last ? 1 : -1
       last = v
       window.clearTimeout(idle)
