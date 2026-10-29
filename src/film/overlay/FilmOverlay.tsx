@@ -266,7 +266,9 @@ export function FilmOverlay({ progress, runway }: FilmOverlayProps) {
     window.addEventListener('keydown', onInterrupt)
     const step = (now: number): void => {
       raf = requestAnimationFrame(step)
-      const dt = Math.min(0.1, (now - last) / 1000)
+      // Up to a quarter second per frame: a struggling device still keeps
+      // roughly the tour's pace (the film follows progress exactly).
+      const dt = Math.min(0.25, (now - last) / 1000)
       last = now
       pos += dt * playRate(pos)
       if (pos >= TOUR_END) {

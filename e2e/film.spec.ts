@@ -200,7 +200,7 @@ test('a scroll resting between sections is carried into the next one', async ({ 
   expect(await progress()).toBeLessThan(0.16)
   // A small real scroll down, then hands off: the film finishes the move.
   await wheelTick(30)
-  await expect.poll(progress, { timeout: 15000 }).toBeGreaterThan(0.166)
+  await expect.poll(progress, { timeout: 40000 }).toBeGreaterThan(0.166)
   expect(await progress()).toBeLessThan(0.175)
   await expect(page.getByTestId('film-chapter')).toHaveAttribute('data-act', 'approach')
 
@@ -214,7 +214,7 @@ test('a scroll resting between sections is carried into the next one', async ({ 
   await wheelTick(30)
   await expect
     .poll(() => page.evaluate(() => document.getElementById('buy')!.getBoundingClientRect().top), {
-      timeout: 15000,
+      timeout: 40000,
     })
     .toBeLessThan(3)
 })
@@ -231,13 +231,26 @@ test('teardown play auto-scrolls the showcase (overnight watchability)', async (
   })
   const play = page.getByTestId('teardown-play')
   await expect(play).toBeVisible()
-  const before = await page.evaluate(() => window.scrollY)
+  // The rail scrolls smoothly; measure from where it actually comes to rest.
+  const scrollY = (): Promise<number> => page.evaluate(() => window.scrollY)
+  let settled = -1
+  await expect
+    .poll(
+      async () => {
+        const y = await scrollY()
+        const still = y === settled
+        settled = y
+        return still
+      },
+      { timeout: 30000, intervals: [400] },
+    )
+    .toBe(true)
+  const before = await scrollY()
   await play.click()
   await expect(play).toHaveAttribute('aria-pressed', 'true')
-  await page.waitForTimeout(6000)
-  const after = await page.evaluate(() => window.scrollY)
-  expect(after).toBeGreaterThan(before + 200)
+  // Software GL draws a few frames a second: poll rather than time it.
+  await expect.poll(scrollY, { timeout: 60000 }).toBeGreaterThan(before + 200)
   await expect(page.getByTestId('film-chapter')).toHaveAttribute('data-act', 'teardown')
   await play.click()
-  await expect(play).toHaveAttribute('aria-pressed', 'false')
+  await expect(play).toHaveAttribute('aria-pressed', 'false', { timeout: 15000 })
 })
