@@ -2,6 +2,33 @@
 
 Newest first. One entry per session or stage.
 
+## 2026-10-30 - Phone model alignment: back-plate corners and rail facets (stopgap)
+
+- Owner: alignment issues and clipping on the phone, "the corners of the
+  backplate and the flips of the phone". Captured on the real GPU at 4x
+  through the camera-act flip and the finish fan, then traced to four causes.
+- Every outline was sampled by polar angle from the centre. A tall phone's
+  corner subtends only ~10 degrees of that, so a corner got ~5 of 48 points
+  (1 to 3 at low detail). The rails turned the corner in stepped facets, and
+  the fan's backs (10 points a quadrant) cut their corners straight, poking
+  through the rim. Outlines are now walked by arc, with half of every
+  quadrant on the corner; concentric loops pair along their normals.
+- The back panel and its rim opening kept the body's 11mm corner radius
+  while inset 1.45mm, leaving a crescent of rail at every rear corner. They
+  are now concentric (BACK_PANEL_R), as are the lower panel, panel gap and
+  the fan's backs (which were also 0.3mm small).
+- The rail walls had one flat normal per facet; now per-vertex normals.
+  The rails' material split sat a quarter of the way down each long side,
+  brushing those ends across the grain; it now falls at each corner's 45
+  degree point.
+- Faint cross-lines along the lit rail did not change when the rail meshes
+  were resampled at twice the density, so they are not geometry
+  (reflections, most likely); left as is.
+- CI: `ubuntu-latest` moved to 26.04 the same day and every WebKit test
+  failed to launch (the cached WebKit links ICU 74, which 26.04 lacks). The
+  jobs are pinned to `ubuntu-24.04`, and the browser cache key names the
+  image.
+
 ## 2026-10-29 - Renamed as a prompting and design capability test
 
 - The owner asked for the GitHub name and description to present the

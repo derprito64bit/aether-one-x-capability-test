@@ -4,9 +4,13 @@ on:
   push:
   pull_request:
 
+# Pinned runner image: ubuntu-latest moved to 26.04 on 2026-10-30, where
+# this Playwright's WebKit cannot start (it links ICU 74). The browser cache
+# key names the image too, so a future image change downloads fresh builds
+# instead of restoring ones built for the old system.
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,7 +23,7 @@ jobs:
       - run: npm run format
       - run: npm run test
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: check
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +38,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-ubuntu-24.04-${{ hashFiles('package-lock.json') }}
       # All three engines: `npm run e2e` is the full chromium/firefox/webkit matrix.
       - run: npx playwright install --with-deps chromium firefox webkit
       - run: npm run e2e
@@ -44,7 +48,7 @@ jobs:
           name: playwright-report
           path: playwright-report/
   lighthouse:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build
     steps:
       - uses: actions/checkout@v4

@@ -6,10 +6,10 @@ import { usePhoneConfig, type FocusLensId } from './PhoneConfig.tsx'
 import {
   BACK_FACE,
   BACK_PANEL,
+  BACK_PANEL_R,
   BEZEL,
   CERAMIC_FACE_Z,
   CHAMFER,
-  CORNER_R,
   DIM,
   DISPLAY_FLEX,
   DISPLAY_INSET,
@@ -171,6 +171,7 @@ function PhoneModelInner({
     assignRailGroups(geometry)
     return geometry
   }, [detail])
+  // Corners concentric with the body (BACK_PANEL_R), like the rim opening.
   const backSlabGeometry = useMemo(
     () =>
       roundedRectSlabGeometry(
@@ -178,6 +179,7 @@ function PhoneModelInner({
         BACK_PANEL.halfH,
         BACK_PANEL.depth,
         BACK_PANEL.bevel,
+        BACK_PANEL_R,
       ),
     [],
   )
@@ -333,7 +335,7 @@ function PhoneModelInner({
       createLowerPanelGeometry(
         BACK_PANEL.halfW - 0.0005,
         BACK_PANEL.halfH - 0.0005,
-        CORNER_R - 0.0005,
+        BACK_PANEL_R - 0.0005,
         PANEL_SPLIT.seamY - PANEL_SPLIT.seamWidth / 2,
         LOWER_PANEL_DEPTH,
       ),

@@ -7,8 +7,8 @@ import type { FocusLensId } from '../../components/PhoneViewer/PhoneConfig.tsx'
 import {
   BACK_FACE,
   BACK_PANEL,
+  BACK_PANEL_R,
   CERAMIC_FACE_Z,
-  CORNER_R,
   MIDFRAME,
 } from '../../components/PhoneViewer/phoneDimensions.ts'
 import {
@@ -124,13 +124,18 @@ export function FinishFan({
       body,
       rim,
       ring,
+      // The hero's panel outline exactly (softSlab's extent includes its
+      // bevel; the hero's slab adds it outside), concentric corners, and
+      // 16 points a quadrant so every corner vertex lines up with one of
+      // the coarse rim's. It was 0.3mm small with 10 points a quadrant: a
+      // corner or two of straight cuts that poked through the rim.
       back: softSlab(
-        BACK_PANEL.halfW,
-        BACK_PANEL.halfH,
+        BACK_PANEL.halfW + BACK_PANEL.bevel,
+        BACK_PANEL.halfH + BACK_PANEL.bevel,
         BACK_PANEL.depth,
         BACK_PANEL.bevel,
-        CORNER_R,
-        10,
+        BACK_PANEL_R + BACK_PANEL.bevel,
+        16,
       ),
       plate,
       logo: new THREE.PlaneGeometry(0.016, 0.004),

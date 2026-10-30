@@ -37,6 +37,63 @@ describe('roundedRectPoints', () => {
     expect(dist).toBeCloseTo(R, 9)
   })
 
+  it('gives every corner arc half of its quadrant (the corners are where it curves)', () => {
+    // Polar sampling left a tall phone ~5 of 48 points per corner: the
+    // polished rails turned the corner in visible facets.
+    for (const n of [24, 32, 48, 64]) {
+      const pts = roundedRectPoints(HW, HH, R, n)
+      const onArc = pts.filter(
+        ([x, y]) =>
+          Math.abs(x) > HW - R + 1e-9 &&
+          Math.abs(y) > HH - R + 1e-9 &&
+          Math.abs(Math.hypot(Math.abs(x) - (HW - R), Math.abs(y) - (HH - R)) - R) < 1e-9,
+      )
+      // Each corner: n/2 samples, minus the arc start that sits on the edge.
+      expect(onArc.length).toBeGreaterThanOrEqual(4 * (n / 2 - 1))
+    }
+  })
+
+  it('walks CCW from +X without turning back', () => {
+    const pts = roundedRectPoints(HW, HH, R, 32)
+    let prev = -Infinity
+    for (const [x, y] of pts) {
+      const a = (Math.atan2(y, x) + Math.PI * 2) % (Math.PI * 2)
+      expect(a).toBeGreaterThanOrEqual(prev - 1e-12)
+      prev = a
+    }
+  })
+
+  it('pairs concentric outlines point for point along the normal', () => {
+    // An inset part with its radius inset by the same amount sits a
+    // uniform band inside its opening, corners included, so it can never
+    // poke through (the rear panel did, at its corners).
+    const d = 0.00115
+    const outer = roundedRectPoints(HW, HH, R, 48)
+    const inner = roundedRectPoints(HW - d, HH - d, R - d, 48)
+    for (let i = 0; i < outer.length; i++) {
+      const [ox, oy] = outer[i] as [number, number]
+      const [ix, iy] = inner[i] as [number, number]
+      expect(Math.hypot(ox - ix, oy - iy)).toBeCloseTo(d, 9)
+    }
+  })
+
+  it('handles pills and sharp corners without duplicate points', () => {
+    for (const [hw, hh, r] of [
+      [0.002, 0.006, 0.002],
+      [0.004, 0.004, 0.004],
+      [0.01, 0.02, 0],
+    ] as const) {
+      const pts = roundedRectPoints(hw, hh, r, 8)
+      expect(pts).toHaveLength(32)
+      expect(pts[0]?.[0]).toBeCloseTo(hw, 12)
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i] as [number, number]
+        const b = pts[(i + 1) % pts.length] as [number, number]
+        expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeGreaterThan(1e-9)
+      }
+    }
+  })
+
   it('keeps every loop point on the boundary (inset stays positive)', () => {
     for (const [hw, hh, r] of [
       [HW, HH, R],

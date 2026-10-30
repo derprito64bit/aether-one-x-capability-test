@@ -250,6 +250,15 @@ export const EARPIECE = { w: 0.012, h: 0.0006, y: 0.0772 } as const
 export const CORNER_R = 0.011
 
 /**
+ * The ceramic panel's corner radius, concentric with the body: its
+ * outline is inset 1.45mm from the body edge (before its 0.3mm bevel), so
+ * the radius is inset by the same. It used the body's own 11mm, which left
+ * a crescent of rail at every rear corner (0.8mm across at 45 degrees
+ * against 0.2mm along the sides) and made the panel read as misfitted.
+ */
+export const BACK_PANEL_R = CORNER_R - (DIM.w / 2 - BACK_PANEL.halfW)
+
+/**
  * Chamfer sizes in meters. Every visible edge gets one or it renders as a
  * hard colour boundary with no specular line.
  */

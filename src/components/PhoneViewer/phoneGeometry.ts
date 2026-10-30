@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { roundedRectPoints } from '../../lib/rounded-rect.ts'
 import {
   BACK_PANEL,
+  BACK_PANEL_R,
   BEZEL,
   BEZEL_SURFACE,
   CORNER_R,
@@ -13,8 +14,9 @@ import {
 } from './phoneDimensions.ts'
 
 /**
- * Body outline loop: rounded rect with the frozen corner radius, sampled
- * by polar angle (+X start, monotone CCW, 4 * perQuadrant points). The old
+ * Body outline loop: rounded rect with the frozen corner radius, walked by
+ * arc with half the points on the corners (+X start, monotone CCW,
+ * 4 * perQuadrant points; see lib/rounded-rect.ts). The old
  * superellipse family is retired (round 02): its ever-curving sides bowed
  * outward along their whole length and read as a pebble, not a phone.
  * Inner holes inset the corner radius by the ledge so the band stays a
@@ -88,9 +90,10 @@ export function createPanelGapGeometry(
   top: boolean,
   halfW: number = BACK_PANEL.halfW + 0.0001,
   halfH: number = BACK_PANEL.halfH + 0.0001,
+  cornerR: number = BACK_PANEL_R + 0.0001,
 ): THREE.BufferGeometry {
   const sign = top ? 1 : -1
-  const loop = bodyOutlinePoints(halfW, halfH, CORNER_R, 64)
+  const loop = bodyOutlinePoints(halfW, halfH, cornerR, 64)
   const band = loop.filter(([, y]) => sign * y > halfH - 0.004)
   const width = 0.00012
   const positions: number[] = []
@@ -176,9 +179,10 @@ export function createLowerPanelGeometry(
  * A holed ExtrudeGeometry is not used because earcut drops dense holes
  * against a dense superellipse outer (the ring rendered as a solid plate;
  * see ringHole.test.ts). Every triangle here is constructed, so the
- * opening exists by construction. Outer and inner loops are angle-matched
- * (same ray from the center hits both at the same index), which keeps the
- * strip quads clean with no twisting.
+ * opening exists by construction. Outer and inner loops are concentric and
+ * index-paired (the same corner angle or side fraction at the same index,
+ * offset along the normal), which keeps the strip quads clean with no
+ * twisting.
  */
 export function createFrameRingGeometry(coarse = false): THREE.BufferGeometry {
   const perQuadrant = coarse ? 32 : 64
@@ -305,11 +309,14 @@ export const RING_OPENING = {
   r: Math.max(0.0005, CORNER_R - BEZEL * 0.95),
 } as const
 
-/** Rear rim panel opening: the ceramic panel's widest outline plus 0.05mm. */
+/**
+ * Rear rim panel opening: the ceramic panel's widest outline plus 0.05mm,
+ * concentric with the body like the panel (BACK_PANEL_R).
+ */
 export const REAR_RIM_OPENING = {
   halfW: BACK_PANEL.halfW + BACK_PANEL.bevel + 0.00005,
   halfH: BACK_PANEL.halfH + BACK_PANEL.bevel + 0.00005,
-  r: CORNER_R + BACK_PANEL.bevel + 0.00005,
+  r: BACK_PANEL_R + BACK_PANEL.bevel + 0.00005,
 } as const
 
 /**
@@ -654,8 +661,22 @@ export function createOutlineAnnulusGeometry(
   const positions: number[] = []
   const normals: number[] = []
   const uvs: number[] = []
-  const tri = (a: number[], b: number[], c: number[], n: number[]): void => {
-    // Wind to match the intended normal.
+  // Per-vertex normals: the walls shade smoothly round the corners (one
+  // flat normal per facet read as stepped bands on the polished rails).
+  // Winding and the UV axis follow the face's average normal.
+  const tri = (
+    a: number[],
+    b: number[],
+    c: number[],
+    na: number[],
+    nb: number[],
+    nc: number[],
+  ): void => {
+    const n = [
+      (na[0] ?? 0) + (nb[0] ?? 0) + (nc[0] ?? 0),
+      (na[1] ?? 0) + (nb[1] ?? 0) + (nc[1] ?? 0),
+      (na[2] ?? 0) + (nb[2] ?? 0) + (nc[2] ?? 0),
+    ]
     const ux = (b[0] ?? 0) - (a[0] ?? 0)
     const uy = (b[1] ?? 0) - (a[1] ?? 0)
     const uz = (b[2] ?? 0) - (a[2] ?? 0)
@@ -668,18 +689,39 @@ export function createOutlineAnnulusGeometry(
     const flip = cx * (n[0] ?? 0) + cy * (n[1] ?? 0) + cz * (n[2] ?? 0) < 0
     // World-unit UVs like ExtrudeGeometry's: caps in xy, walls along z,
     // so the rail brush maps tile exactly as they did on the solid body.
-    const cap = Math.abs(n[2] ?? 0) > 0.5
+    const cap = Math.abs(n[2] ?? 0) > Math.hypot(n[0] ?? 0, n[1] ?? 0)
     const alongY = Math.abs(n[0] ?? 0) >= Math.abs(n[1] ?? 0)
-    for (const v of flip ? [a, c, b] : [a, b, c]) {
+    const order: Array<[number[], number[]]> = flip
+      ? [
+          [a, na],
+          [c, nc],
+          [b, nb],
+        ]
+      : [
+          [a, na],
+          [b, nb],
+          [c, nc],
+        ]
+    for (const [v, vn] of order) {
       positions.push(v[0] ?? 0, v[1] ?? 0, v[2] ?? 0)
-      normals.push(n[0] ?? 0, n[1] ?? 0, n[2] ?? 0)
+      normals.push(vn[0] ?? 0, vn[1] ?? 0, vn[2] ?? 0)
       if (cap) uvs.push(v[0] ?? 0, v[1] ?? 0)
       else uvs.push(alongY ? (v[1] ?? 0) : (v[0] ?? 0), 1 - (v[2] ?? 0))
     }
   }
-  const quad = (a: number[], b: number[], c: number[], d: number[], n: number[]): void => {
-    tri(a, b, c, n)
-    tri(a, c, d, n)
+  /** Quad a-b-c-d with one normal per corner. */
+  const quad = (
+    a: number[],
+    b: number[],
+    c: number[],
+    d: number[],
+    na: number[],
+    nb: number[],
+    nc: number[],
+    nd: number[],
+  ): void => {
+    tri(a, b, c, na, nb, nc)
+    tri(a, c, d, na, nc, nd)
   }
   const outward = (loop: Array<[number, number]>, i: number): [number, number] => {
     const p = loop[i] as [number, number]
@@ -703,17 +745,39 @@ export function createOutlineAnnulusGeometry(
     const b = outer[j] as [number, number]
     const c = inner[i] as [number, number]
     const d = inner[j] as [number, number]
-    const na = outward(outer, i)
-    const nb = outward(outer, j)
-    const n0: [number, number] = [(na[0] + nb[0]) / 2, (na[1] + nb[1]) / 2]
-    const ma = outward(inner, i)
-    const mb = outward(inner, j)
-    const m0: [number, number] = [-(ma[0] + mb[0]) / 2, -(ma[1] + mb[1]) / 2]
+    const oa = outward(outer, i)
+    const ob = outward(outer, j)
+    const na = [oa[0], oa[1], 0]
+    const nb = [ob[0], ob[1], 0]
+    const ia = outward(inner, i)
+    const ib = outward(inner, j)
+    const ma = [-ia[0], -ia[1], 0]
+    const mb = [-ib[0], -ib[1], 0]
+    const front = [0, 0, 1]
+    const rear = [0, 0, -1]
     // Outer wall, opening wall, front cap, rear cap.
-    quad([a[0], a[1], zB], [b[0], b[1], zB], [b[0], b[1], zF], [a[0], a[1], zF], [n0[0], n0[1], 0])
-    quad([c[0], c[1], zB], [c[0], c[1], zF], [d[0], d[1], zF], [d[0], d[1], zB], [m0[0], m0[1], 0])
-    quad([a[0], a[1], zF], [b[0], b[1], zF], [d[0], d[1], zF], [c[0], c[1], zF], [0, 0, 1])
-    quad([a[0], a[1], zB], [c[0], c[1], zB], [d[0], d[1], zB], [b[0], b[1], zB], [0, 0, -1])
+    quad([a[0], a[1], zB], [b[0], b[1], zB], [b[0], b[1], zF], [a[0], a[1], zF], na, nb, nb, na)
+    quad([c[0], c[1], zB], [c[0], c[1], zF], [d[0], d[1], zF], [d[0], d[1], zB], ma, ma, mb, mb)
+    quad(
+      [a[0], a[1], zF],
+      [b[0], b[1], zF],
+      [d[0], d[1], zF],
+      [c[0], c[1], zF],
+      front,
+      front,
+      front,
+      front,
+    )
+    quad(
+      [a[0], a[1], zB],
+      [c[0], c[1], zB],
+      [d[0], d[1], zB],
+      [b[0], b[1], zB],
+      rear,
+      rear,
+      rear,
+      rear,
+    )
   }
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
@@ -779,19 +843,44 @@ export function disposeGeometries(set: { [key: string]: THREE.BufferGeometry }):
 }
 
 /**
- * Splits a non-indexed extrusion into four rail groups (+X, -X, +Y, -Y) by
- * face-centroid sector, so each rail takes its own anisotropy rotation.
- * Triangles are reordered into contiguous buckets; group material indices
- * follow RAIL_KEYS order. Deterministic and allocation-light.
+ * Splits a non-indexed extrusion into four rail groups (+X, -X, +Y, -Y),
+ * so each rail takes its own anisotropy rotation. A triangle belongs to
+ * the side its outline faces, measured from the body's corner centres:
+ * the switch falls at each corner's 45 degree point. (Sorting by the
+ * centroid's |x| against |y| put the top and bottom quarters of each long
+ * side rail on the short rails' brush direction, so they shaded across
+ * the grain when the phone turned.) Triangles are reordered into
+ * contiguous buckets; group material indices follow RAIL_KEYS order.
+ * Deterministic and allocation-light.
  */
 export function assignRailGroups(geometry: THREE.BufferGeometry): void {
   const position = geometry.getAttribute('position') as THREE.BufferAttribute
   const triCount = Math.floor(position.count / 3)
   const buckets: number[][] = [[], [], [], []]
+  const qx = DIM.w / 2 - CORNER_R
+  const qy = DIM.h / 2 - CORNER_R
   for (let t = 0; t < triCount; t++) {
     const cx = (position.getX(t * 3) + position.getX(t * 3 + 1) + position.getX(t * 3 + 2)) / 3
     const cy = (position.getY(t * 3) + position.getY(t * 3 + 1) + position.getY(t * 3 + 2)) / 3
-    const sector = Math.abs(cx) >= Math.abs(cy) ? (cx >= 0 ? 0 : 1) : cy >= 0 ? 2 : 3
+    // Direction from the nearest point of the corner-centre rectangle.
+    const dx = cx - Math.max(-qx, Math.min(qx, cx))
+    const dy = cy - Math.max(-qy, Math.min(qy, cy))
+    const sector =
+      dx === 0 && dy === 0
+        ? Math.abs(cx) * qy >= Math.abs(cy) * qx
+          ? cx >= 0
+            ? 0
+            : 1
+          : cy >= 0
+            ? 2
+            : 3
+        : Math.abs(dx) >= Math.abs(dy)
+          ? dx >= 0
+            ? 0
+            : 1
+          : dy >= 0
+            ? 2
+            : 3
     const bucket = buckets[sector]
     if (bucket !== undefined) bucket.push(t)
   }
