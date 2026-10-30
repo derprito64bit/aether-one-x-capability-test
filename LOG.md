@@ -24,6 +24,10 @@ Newest first. One entry per session or stage.
 - Faint cross-lines along the lit rail did not change when the rail meshes
   were resampled at twice the density, so they are not geometry
   (reflections, most likely); left as is.
+- CI: `ubuntu-latest` moved to 26.04 the same day and every WebKit test
+  failed to launch (the cached WebKit links ICU 74, which 26.04 lacks). The
+  jobs are pinned to `ubuntu-24.04`, and the browser cache key names the
+  image.
 
 ## 2026-10-29 - Renamed as a prompting and design capability test
 
