@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { PhoneConfigProvider } from './PhoneConfig.tsx'
 import { PhoneModel } from './PhoneModel.tsx'
-import { BACK_PANEL, CORNER_R, PANEL_SPLIT } from './phoneDimensions.ts'
+import { BACK_PANEL, BACK_PANEL_R, PANEL_SPLIT } from './phoneDimensions.ts'
 import { createLowerPanelGeometry } from './phoneGeometry.ts'
 import { mountScene } from './sceneHarness.ts'
 
@@ -41,7 +41,7 @@ async function measure(
   const lower = createLowerPanelGeometry(
     BACK_PANEL.halfW - 0.0005,
     BACK_PANEL.halfH - 0.0005,
-    CORNER_R - 0.0005,
+    BACK_PANEL_R - 0.0005,
     PANEL_SPLIT.seamY - PANEL_SPLIT.seamWidth / 2,
     PANEL_SPLIT.step + 0.00005,
   )
